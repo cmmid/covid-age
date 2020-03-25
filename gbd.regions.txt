@@ -1,0 +1,202 @@
+Country	Region	SuperRegion
+Bolivia	Andean Latin America	Latin America and Caribbean
+Ecuador	Andean Latin America	Latin America and Caribbean
+Peru	Andean Latin America	Latin America and Caribbean
+Australia	Australasia	High-income
+New Zealand	Australasia	High-income
+Antigua and Barbuda	Caribbean	Latin America and Caribbean
+Bahamas	Caribbean	Latin America and Caribbean
+Barbados	Caribbean	Latin America and Caribbean
+Belize	Caribbean	Latin America and Caribbean
+Cuba	Caribbean	Latin America and Caribbean
+Dominica	Caribbean	Latin America and Caribbean
+Dominican Republic	Caribbean	Latin America and Caribbean
+Grenada	Caribbean	Latin America and Caribbean
+Guyana	Caribbean	Latin America and Caribbean
+Haiti	Caribbean	Latin America and Caribbean
+Jamaica	Caribbean	Latin America and Caribbean
+Saint Kitts and Nevis	Caribbean	Latin America and Caribbean
+Saint Lucia	Caribbean	Latin America and Caribbean
+Saint Vincent and the Grenadines	Caribbean	Latin America and Caribbean
+Suriname	Caribbean	Latin America and Caribbean
+Trinidad and Tobago	Caribbean	Latin America and Caribbean
+Armenia	Central Asia	Central Europe, Eastern Europe, and Central Asia
+Azerbaijan	Central Asia	Central Europe, Eastern Europe, and Central Asia
+Georgia	Central Asia	Central Europe, Eastern Europe, and Central Asia
+Kazakhstan	Central Asia	Central Europe, Eastern Europe, and Central Asia
+Kyrgyzstan	Central Asia	Central Europe, Eastern Europe, and Central Asia
+Mongolia	Central Asia	Central Europe, Eastern Europe, and Central Asia
+Tajikistan	Central Asia	Central Europe, Eastern Europe, and Central Asia
+Turkmenistan	Central Asia	Central Europe, Eastern Europe, and Central Asia
+Uzbekistan	Central Asia	Central Europe, Eastern Europe, and Central Asia
+Albania	Central Europe	Central Europe, Eastern Europe, and Central Asia
+Bosnia and Herzegovina	Central Europe	Central Europe, Eastern Europe, and Central Asia
+Bulgaria	Central Europe	Central Europe, Eastern Europe, and Central Asia
+Croatia	Central Europe	Central Europe, Eastern Europe, and Central Asia
+Czech Republic	Central Europe	Central Europe, Eastern Europe, and Central Asia
+Hungary	Central Europe	Central Europe, Eastern Europe, and Central Asia
+Kosovo	Central Europe	Central Europe, Eastern Europe, and Central Asia
+Montenegro	Central Europe	Central Europe, Eastern Europe, and Central Asia
+North Macedonia	Central Europe	Central Europe, Eastern Europe, and Central Asia
+Poland	Central Europe	Central Europe, Eastern Europe, and Central Asia
+Romania	Central Europe	Central Europe, Eastern Europe, and Central Asia
+Serbia	Central Europe	Central Europe, Eastern Europe, and Central Asia
+Slovakia	Central Europe	Central Europe, Eastern Europe, and Central Asia
+Slovenia	Central Europe	Central Europe, Eastern Europe, and Central Asia
+Colombia	Central Latin America	Latin America and Caribbean
+Costa Rica	Central Latin America	Latin America and Caribbean
+El Salvador	Central Latin America	Latin America and Caribbean
+Guatemala	Central Latin America	Latin America and Caribbean
+Honduras	Central Latin America	Latin America and Caribbean
+Mexico	Central Latin America	Latin America and Caribbean
+Nicaragua	Central Latin America	Latin America and Caribbean
+Panama	Central Latin America	Latin America and Caribbean
+Venezuela	Central Latin America	Latin America and Caribbean
+Angola	Central Sub-Saharan Africa	Sub-Saharan Africa
+Central African Republic	Central Sub-Saharan Africa	Sub-Saharan Africa
+Congo	Central Sub-Saharan Africa	Sub-Saharan Africa
+Democratic Republic of the Congo	Central Sub-Saharan Africa	Sub-Saharan Africa
+Equatorial Guinea	Central Sub-Saharan Africa	Sub-Saharan Africa
+Gabon	Central Sub-Saharan Africa	Sub-Saharan Africa
+China	East Asia	Southeast Asia, East Asia, and Oceania
+North Korea	East Asia	Southeast Asia, East Asia, and Oceania
+Taiwan	East Asia	Southeast Asia, East Asia, and Oceania
+Belarus	Eastern Europe	Central Europe, Eastern Europe, and Central Asia
+Estonia	Eastern Europe	Central Europe, Eastern Europe, and Central Asia
+Latvia	Eastern Europe	Central Europe, Eastern Europe, and Central Asia
+Lithuania	Eastern Europe	Central Europe, Eastern Europe, and Central Asia
+Moldova	Eastern Europe	Central Europe, Eastern Europe, and Central Asia
+Russia	Eastern Europe	Central Europe, Eastern Europe, and Central Asia
+Ukraine	Eastern Europe	Central Europe, Eastern Europe, and Central Asia
+Burundi	Eastern Sub-Saharan Africa	Sub-Saharan Africa
+Comoros	Eastern Sub-Saharan Africa	Sub-Saharan Africa
+Djibouti	Eastern Sub-Saharan Africa	Sub-Saharan Africa
+Eritrea	Eastern Sub-Saharan Africa	Sub-Saharan Africa
+Ethiopia	Eastern Sub-Saharan Africa	Sub-Saharan Africa
+Kenya	Eastern Sub-Saharan Africa	Sub-Saharan Africa
+Madagascar	Eastern Sub-Saharan Africa	Sub-Saharan Africa
+Malawi	Eastern Sub-Saharan Africa	Sub-Saharan Africa
+Mozambique	Eastern Sub-Saharan Africa	Sub-Saharan Africa
+Rwanda	Eastern Sub-Saharan Africa	Sub-Saharan Africa
+Somalia	Eastern Sub-Saharan Africa	Sub-Saharan Africa
+South Sudan	Eastern Sub-Saharan Africa	Sub-Saharan Africa
+Sudan	Eastern Sub-Saharan Africa	Sub-Saharan Africa
+Uganda	Eastern Sub-Saharan Africa	Sub-Saharan Africa
+Tanzania	Eastern Sub-Saharan Africa	Sub-Saharan Africa
+Zambia	Eastern Sub-Saharan Africa	Sub-Saharan Africa
+Brunei	High-income Asia Pacific	High-income
+Japan	High-income Asia Pacific	High-income
+South Korea	High-income Asia Pacific	High-income
+Singapore	High-income Asia Pacific	High-income
+Canada	High-income North America	High-income
+United States	High-income North America	High-income
+Afghanistan	North Africa and Middle East	North Africa and Middle East
+Algeria	North Africa and Middle East	North Africa and Middle East
+Bahrain	North Africa and Middle East	North Africa and Middle East
+Egypt	North Africa and Middle East	North Africa and Middle East
+Iran	North Africa and Middle East	North Africa and Middle East
+Iraq	North Africa and Middle East	North Africa and Middle East
+Jordan	North Africa and Middle East	North Africa and Middle East
+Kuwait	North Africa and Middle East	North Africa and Middle East
+Lebanon	North Africa and Middle East	North Africa and Middle East
+Libya	North Africa and Middle East	North Africa and Middle East
+Morocco	North Africa and Middle East	North Africa and Middle East
+Oman	North Africa and Middle East	North Africa and Middle East
+Palestine	North Africa and Middle East	North Africa and Middle East
+Qatar	North Africa and Middle East	North Africa and Middle East
+Saudi Arabia	North Africa and Middle East	North Africa and Middle East
+Syria	North Africa and Middle East	North Africa and Middle East
+Tunisia	North Africa and Middle East	North Africa and Middle East
+Turkey	North Africa and Middle East	North Africa and Middle East
+United Arab Emirates	North Africa and Middle East	North Africa and Middle East
+Western Sahara	North Africa and Middle East	North Africa and Middle East
+Yemen	North Africa and Middle East	North Africa and Middle East
+Fiji	Oceania	Southeast Asia, East Asia, and Oceania
+Kiribati	Oceania	Southeast Asia, East Asia, and Oceania
+Marshall Islands	Oceania	Southeast Asia, East Asia, and Oceania
+Micronesia	Oceania	Southeast Asia, East Asia, and Oceania
+Nauru	Oceania	Southeast Asia, East Asia, and Oceania
+Niue	Oceania	Southeast Asia, East Asia, and Oceania
+Palau	Oceania	Southeast Asia, East Asia, and Oceania
+Papua New Guinea	Oceania	Southeast Asia, East Asia, and Oceania
+Samoa	Oceania	Southeast Asia, East Asia, and Oceania
+Solomon Islands	Oceania	Southeast Asia, East Asia, and Oceania
+Tonga	Oceania	Southeast Asia, East Asia, and Oceania
+Tuvalu	Oceania	Southeast Asia, East Asia, and Oceania
+Vanuatu	Oceania	Southeast Asia, East Asia, and Oceania
+Bangladesh	South Asia	South Asia
+Bhutan	South Asia	South Asia
+India	South Asia	South Asia
+Nepal	South Asia	South Asia
+Pakistan	South Asia	South Asia
+Cambodia	Southeast Asia	Southeast Asia, East Asia, and Oceania
+Indonesia	Southeast Asia	Southeast Asia, East Asia, and Oceania
+Lao	Southeast Asia	Southeast Asia, East Asia, and Oceania
+Malaysia	Southeast Asia	Southeast Asia, East Asia, and Oceania
+Maldives	Southeast Asia	Southeast Asia, East Asia, and Oceania
+Mauritius	Southeast Asia	Southeast Asia, East Asia, and Oceania
+Myanmar	Southeast Asia	Southeast Asia, East Asia, and Oceania
+Philippines	Southeast Asia	Southeast Asia, East Asia, and Oceania
+Seychelles	Southeast Asia	Southeast Asia, East Asia, and Oceania
+Sri Lanka	Southeast Asia	Southeast Asia, East Asia, and Oceania
+Thailand	Southeast Asia	Southeast Asia, East Asia, and Oceania
+Timor-Leste	Southeast Asia	Southeast Asia, East Asia, and Oceania
+Vietnam	Southeast Asia	Southeast Asia, East Asia, and Oceania
+Argentina	Southern Latin America	High-income
+Chile	Southern Latin America	High-income
+Uruguay	Southern Latin America	High-income
+Botswana	Southern Sub-Saharan Africa	Sub-Saharan Africa
+Eswatini	Southern Sub-Saharan Africa	Sub-Saharan Africa
+Lesotho	Southern Sub-Saharan Africa	Sub-Saharan Africa
+Namibia	Southern Sub-Saharan Africa	Sub-Saharan Africa
+South Africa	Southern Sub-Saharan Africa	Sub-Saharan Africa
+Zimbabwe	Southern Sub-Saharan Africa	Sub-Saharan Africa
+Brazil	Tropical Latin America	Latin America and Caribbean
+Paraguay	Tropical Latin America	Latin America and Caribbean
+Andorra	Western Europe	High-income
+Austria	Western Europe	High-income
+Belgium	Western Europe	High-income
+Cyprus	Western Europe	High-income
+Denmark	Western Europe	High-income
+Finland	Western Europe	High-income
+France	Western Europe	High-income
+Germany	Western Europe	High-income
+Greece	Western Europe	High-income
+Iceland	Western Europe	High-income
+Ireland	Western Europe	High-income
+Israel	Western Europe	High-income
+Italy	Western Europe	High-income
+Liechtenstein	Western Europe	High-income
+Luxembourg	Western Europe	High-income
+Malta	Western Europe	High-income
+Monaco	Western Europe	High-income
+Netherlands	Western Europe	High-income
+Norway	Western Europe	High-income
+Portugal	Western Europe	High-income
+San Marino	Western Europe	High-income
+Spain	Western Europe	High-income
+Sweden	Western Europe	High-income
+Switzerland	Western Europe	High-income
+United Kingdom	Western Europe	High-income
+Vatican City	Western Europe	High-income
+Benin	Western Sub-Saharan Africa	Sub-Saharan Africa
+Burkina Faso	Western Sub-Saharan Africa	Sub-Saharan Africa
+Cabo Verde	Western Sub-Saharan Africa	Sub-Saharan Africa
+Cameroon	Western Sub-Saharan Africa	Sub-Saharan Africa
+Chad	Western Sub-Saharan Africa	Sub-Saharan Africa
+Côte d'Ivoire	Western Sub-Saharan Africa	Sub-Saharan Africa
+Gambia	Western Sub-Saharan Africa	Sub-Saharan Africa
+Ghana	Western Sub-Saharan Africa	Sub-Saharan Africa
+Guinea	Western Sub-Saharan Africa	Sub-Saharan Africa
+Guinea-Bissau	Western Sub-Saharan Africa	Sub-Saharan Africa
+Liberia	Western Sub-Saharan Africa	Sub-Saharan Africa
+Mali	Western Sub-Saharan Africa	Sub-Saharan Africa
+Mauritania	Western Sub-Saharan Africa	Sub-Saharan Africa
+Niger	Western Sub-Saharan Africa	Sub-Saharan Africa
+Nigeria	Western Sub-Saharan Africa	Sub-Saharan Africa
+Sao Tome and Principe	Western Sub-Saharan Africa	Sub-Saharan Africa
+Senegal	Western Sub-Saharan Africa	Sub-Saharan Africa
+Sierra Leone	Western Sub-Saharan Africa	Sub-Saharan Africa
+Togo	Western Sub-Saharan Africa	Sub-Saharan Africa
+Puerto Rico	Caribbean	Latin America and Caribbean
+Hong Kong	High-income Asia Pacific	High-income
