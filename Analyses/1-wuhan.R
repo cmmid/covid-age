@@ -14,7 +14,8 @@ library(qs)
 path = function(x, prefix = "~/Dropbox/nCoV/Analyses/") { paste0(prefix, x); }
 
 # covidm options
-cm_path = "~/Dropbox/nCoV/covidm/";
+cm_path = "~/Documents/ncov_age/covidm/";
+cm_version = 1;
 cm_force_rebuild = F;
 if (Sys.info()["nodename"] %like% "lshtm") {
     cm_build_dir = paste0(cm_path, "build/lshtm");
@@ -79,10 +80,10 @@ base_parameters = function(pop_region, mat_region, susc, symp, fIa, report)
     pop = list();
     pop$type = "SEI3R";
     
-    pop$dE  = cm_delay_gamma(4.0, 4.0, t_max = 60, t_step = 0.25)$p # Derived from Backer et al Eurosurveillance
-    pop$dIp = cm_delay_gamma(2.4, 4.0, t_max = 60, t_step = 0.25)$p # Derived from Backer et al Eurosurveillance
-    pop$dIa = cm_delay_gamma(7.0, 4.0, t_max = 60, t_step = 0.25)$p # Assumed 7 days subclinical shedding
-    pop$dIs = cm_delay_gamma(3.2, 3.7, t_max = 60, t_step = 0.25)$p # Zhang et al 2020
+    pop$dE  = cm_delay_gamma(3.0, 4.0, t_max = 60, t_step = 0.25)$p # Derived from He et al (44% infectiousness presymptomatic) https://www.nature.com/articles/s41591-020-0869-5#Sec9
+    pop$dIp = cm_delay_gamma(2.1, 4.0, t_max = 60, t_step = 0.25)$p # Derived from Lauer et al (5.1 day incubation period) https://www.ncbi.nlm.nih.gov/pubmed/32150748
+    pop$dIs = cm_delay_gamma(2.9, 4.0, t_max = 60, t_step = 0.25)$p # 5 days total: 5.5 day serial interval
+    pop$dIa = cm_delay_gamma(5.0, 4.0, t_max = 60, t_step = 0.25)$p # Assumed same infectious period as clinical cases
     pop$dH  = c(1, 0); # hospitalization ignored
     pop$dC  = c(1, 0); # cases are reported immediately -- because fitting is retrospective to case onset.
     
@@ -206,6 +207,27 @@ pf_symp = function(p, x)
     return (p);
 }
 
+pf_both = function(p, x)
+{
+    x = as.list(x);
+    n_age_groups = nrow(p$pop[[1]]$matrices$home);
+
+    # definition of "young", "middle", and "old"
+    young  = cm_interpolate_cos(seq(2.5, n_age_groups * 5 - 2.5, by = 5), x$age_y, 1, x$age_m, 0);
+    old    = cm_interpolate_cos(seq(2.5, n_age_groups * 5 - 2.5, by = 5), x$age_m, 0, x$age_o, 1);
+    middle = 1 - young - old;
+
+    p$pop[[1]]$u = x$susc * (young * x$eff_y + middle * x$eff_m + old * x$eff_o);
+    p$pop[[1]]$y =    0.5 * (young * x$eff_y + middle * x$eff_m + old * x$eff_o);
+    p$pop[[1]]$dist_seed_ages = cm_age_coefficients(x$seed_age - x$seed_age_range, x$seed_age + x$seed_age_range, 5 * (0:n_age_groups));
+    seed_start = floor(x$seed_start);
+    p$pop[[1]]$seed_times = seed_start + 0:13; # seed for 14 days
+    p$pop[[1]]$schedule = list(
+        list(t = "2020-01-12", contact = c(x$qH, x$qH, 0, x$qH)),
+        list(t = "2020-01-23", contact = c(x$qL, x$qL, 0, x$qL))
+    );
+    return (p);
+}
 
 
 run_fit = function(scenario, fIa, rho)
@@ -247,7 +269,7 @@ run_fit = function(scenario, fIa, rho)
             age_o = "N 75 15 T 60 90",
             susc = "N 0.1 0.025 T 0 0.25",
             symp_y = "N 0.5 0.1 T 0 0.5",
-            symp_m = "N 0.5 0.01 T 0 1",
+            symp_m = "N 0.5 0.1 T 0 1",
             symp_o = "N 0.5 0.1 T 0.5 1",
             seed_start = "N 15 30 T 0 30",
             seed_age = "N 60 20 T 30 80", 
@@ -256,6 +278,22 @@ run_fit = function(scenario, fIa, rho)
             qL = "B 2 2"
         );
         pf = pf_symp;
+    } else if (scenario == "both") {
+        priors = list(
+            age_y = "N 15 15 T 0 30", 
+            age_m = "N 45 15 T 30 60", 
+            age_o = "N 75 15 T 60 90",
+            susc = "N 0.1 0.025 T 0 0.25",
+            eff_y = "N 1 0.20 T 0 1",
+            eff_m = "N 1 0.20 T 0.5 1.5",
+            eff_o = "N 1 0.20 T 1 2",
+            seed_start = "N 15 30 T 0 30",
+            seed_age = "N 60 20 T 30 80", 
+            seed_age_range = "B 2 2 S 0 10", 
+            qH = "B 2 2 S 0 2", 
+            qL = "B 2 2"
+        );
+        pf = pf_both;
     }
     
     fit = cm_fit(
@@ -271,6 +309,18 @@ run_fit = function(scenario, fIa, rho)
     
     return (fit)
 }
+
+# fit_same = run_fit("same", 0.5)
+# fit_susc = run_fit("susc", 0.5)
+# fit_symp3 = run_fit("symp", 0.5)
+# 
+# hist(fit_symp$posterior$lp, breaks = 200)
+# 
+# rows = sample.int(fit_symp$posterior[, .N], replace = T, prob = fit_symp$posterior[, exp(lp)])
+# fit_symp2 = duplicate(fit_symp)
+# fit_symp2$posterior = fit_symp2$posterior[rows]
+# 
+# cm_plot_posterior(fit_symp3)
 
 argv = commandArgs();
 argc = length(argv);

@@ -48,11 +48,15 @@ cm_unduplicate_names = function(names)
 # Annotate returned dynamics with more informative names for population and group columns.
 cm_annotate_dynamics = function(dynamics, parameters)
 {
+    pop_number = F;
+    group_number = F;
+    
     pnames = list()
     for (p in 1:length(parameters$pop)) {
         pnames[[p]] = parameters$pop[[p]]$name;
-        if (is.null(pnames[[p]])) {
+        if (is.null(parameters$pop[[p]]$name)) {
             pnames[[p]] = p;
+            pop_number = T;
         }
         group_names = parameters$pop[[p]]$group_names;
         if (!is.null(group_names)) {
@@ -60,14 +64,19 @@ cm_annotate_dynamics = function(dynamics, parameters)
             dynamics[population == p, group_name := group_names[group]];
         } else {
             dynamics[population == p, group_name := as.character(group)];
+            group_number = T;
         }
     }
     
     pnames = cm_unduplicate_names(pnames);
     dynamics[, population := pnames[population]];
     
-    dynamics[, population := factor(population, levels = unique(population))];
-    dynamics[, group := factor(group_name, levels = unique(group_name))];
+    if (!pop_number) {
+        dynamics[, population := factor(population, levels = unique(population))];
+    }
+    if (!group_number) {
+        dynamics[, group := factor(group_name, levels = unique(group_name))];
+    }
     dynamics[, group_name := NULL];
     
     return (dynamics);

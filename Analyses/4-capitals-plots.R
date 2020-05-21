@@ -15,6 +15,7 @@ library(rlang)
 library(readxl)
 library(cowplot)
 
+txt_theme = theme(plot.title = element_text(face = "plain", size = 7, hjust = 0.5))
 path = function(x, prefix = "~/Dropbox/nCoV/Analyses/") { paste0(prefix, x); }
 
 # covidm options
@@ -35,7 +36,36 @@ mean_ci = function(x, ci = 0.95)
 }
 
 # Load and process data
-cap = cm_load(path("4-capitals-fix-u.qs"))
+# epi dist mean_age R0
+cap0 = cm_load(path("4-capitals-fix-u-fIa0.qs"))
+cap0.5 = cm_load(path("4-capitals-fix-u-fIa0.5.qs"))
+cap1 = cm_load(path("4-capitals-fix-u-fIa1.qs"))
+#capfull = cm_load(path("4-capitals-mean-fix-u-fIa0.5.qs"))
+cap = cap0;
+cap$epi = rbind(cap0$epi, cap0.5$epi, cap1$epi)
+cap$dist = rbind(cap0$dist, cap0.5$dist, cap1$dist)
+cap$mean_age = rbind(cap0$mean_age, cap0.5$mean_age, cap1$mean_age)
+cap$R0 = rbind(cap0$R0, cap0.5$R0, cap1$R0)
+cap$age_info = merge(cap$age_info, wc[, .(name, popK = pop / 1000)], by = "name")
+
+# numbers for paper
+numbers = merge(cap$epi, cap$age_info, by.x = "location", by.y = "name")
+numbers[, decile := "NA"]
+numbers[median_age <= quantile(median_age, 0.1), decile := "young"]
+numbers[median_age >= quantile(median_age, 0.9), decile := "old"]
+
+# total
+numc = numbers[compartment == "cases" & fIa == 0.5, .(cases = mean(cases/popK)), by = .(location, t, decile)][, .(cases = sum(cases)), by = .(location, decile)]
+numc[, mean(cases), by = decile]
+nums = numbers[compartment == "subclinical" & fIa == 0.5, .(cases = mean(cases/popK)), by = .(location, t, decile)][, .(cases = sum(cases)), by = .(location, decile)]
+nums[, mean(cases), by = decile]
+
+# peak
+numcp = numbers[compartment == "cases" & fIa == 0.5, .(cases = mean(cases/popK)), by = .(location, t, decile)][, .(cases = sum(cases)), by = .(location, week = t%/%7, decile)][, .(cases = max(cases)), by = .(location, decile)]
+numcp[, mean(cases), by = decile]
+numsp = numbers[compartment == "subclinical" & fIa == 0.5, .(cases = mean(cases/popK)), by = .(location, t, decile)][, .(cases = sum(cases)), by = .(location, week = t%/%7, decile)][, .(cases = max(cases)), by = .(location, decile)]
+numsp[, mean(cases), by = decile]
+
 gbd = fread("~/Dropbox/nCoV/gbd.regions.txt");
 gbd$iso2c = countrycode(gbd$Country, origin = "country.name", dest = "iso2c")
 
@@ -56,34 +86,28 @@ mean_age = cap$mean_age
 theme_set(theme_cowplot(font_size = 7, font_family = "Helvetica", line_size = 0.25))
 
 # B. Wiggly plot
-res2 = cap$epi[compartment == "cases" & virus == "cov" & schools == "open" & fIa == 0.5]
-pd = res2[, .(peak_day = which.max(cases) - 1), by = .(run, location)]
-res2 = merge(res2, pd, by = c("run", "location"))
-ma2 = mean_age[what == "cases" & virus == "cov" & fIa == 0.5]
-ma2 = merge(ma2, pd, by = c("run", "location"))
-
-res2 = merge(res2, cap$wc[, .(name, country = country.etc, iso2c = cc)], by.x = "location", by.y = "name")
+res2 = cap0.5$cases_age
+res2[, run := rep(rep(1:50, each = 3), 146 * 732)]
+res2 = res2[, .(cases = mean(cases)), by = .(t, location, age)]
+res2 = merge(res2, res2[, .(totcases = sum(cases)), by = .(t, location)])
+pd = res2[, .(peak_day = (which.max(totcases) - 1) / 3), keyby = .(location)]
+res2 = merge(res2, pd, by = "location")
+res2 = merge(res2, cap$wc[, .(name, country = country.etc, iso2c = cc, pop)], by.x = "location", by.y = "name")
 res2 = merge(res2, gbd, by = "iso2c")
+res2
 
-ma2 = merge(ma2, cap$wc[, .(name, country = country.etc, iso2c = cc)], by.x = "location", by.y = "name")
-ma2 = merge(ma2, gbd, by = "iso2c")
-
-res2h = res2[, cm_mean_hdi(cases/popK), by = .(location, t_minus_peak = t - peak_day, SuperRegionA)]
-ma2h = ma2[, cm_mean_hdi(mean_age), by = .(location, t_minus_peak = t - peak_day, SuperRegionA)]
-
-f4b = ggplot() +
-    geom_ribbon(data = ma2h[t_minus_peak < 200], aes(t_minus_peak, ymin = lower, ymax = upper, group = location, fill = SuperRegionA), alpha = 0.1) +
-    geom_line(data = ma2h[t_minus_peak < 200], aes(t_minus_peak, mean, group = location, colour = SuperRegionA), alpha = 0.5, size = 0.25) +
-    geom_ribbon(data = res2h[t_minus_peak < 200], aes(t_minus_peak, ymin = lower, ymax = upper, group = location, fill = SuperRegionA), alpha = 0.1) +
-    geom_line(data = res2h[t_minus_peak < 200], aes(t_minus_peak, mean, group = location, colour = SuperRegionA), alpha = 0.5, size = 0.25) +
-    theme(legend.position = "none") +
-    labs(x = "Time relative to peak (days)", y = "Mean age of cases +\nClinical cases per 1000 population")
+f4b = ggplot(res2[totcases/pop > 5/100000]) + 
+    geom_line(aes(x = t - peak_day, y = 100 * cases/totcases, colour = SuperRegionA, group = location), size = 0.25, alpha = 0.5) +
+    facet_grid(age~., switch = "y") +
+    xlim(-40, 40) +
+    theme(legend.position = "none", strip.background = element_blank(), strip.placement = "outside") +
+    labs(x = "Time relative to peak (days)", y = "Proportion of cases\nin age group (%)")
 
 ggsave(path("../Submission/Fig4b.pdf"), f4b, width = 10, height = 12, units = "cm", useDingbats = F)
 
 
 # C. Distribution of cases by country / region
-dist = merge(dist, cap$wc[, .(name, country = country.etc, iso2c = cc)], by.x = "location", by.y = "name")
+dist = merge(dist, cap$wc[, .(name, country = country.etc, iso2c = cc, popK = pop / 1000)], by.x = "location", by.y = "name")
 dist = merge(dist, gbd, by = "iso2c")
 dist[, age_mid := as.numeric(str_sub(age, 1, 2)) + 5]
 
@@ -112,11 +136,12 @@ ggsave(path("../Submission/Fig4c.pdf"), f4c, width = 7, height = 12, units = "cm
 
 # A. Scatter plot
 epi = cap$epi[virus == "cov" & compartment == "cases"]
+epi = merge(epi, wc[, .(location = name, popK = pop / 1000)], by = "location")
 epi[, week := t %/% 7]
 epi = epi[, .(incidence = sum(cases)), by = .(run, virus, location, compartment, fIa, week, popK)]
 epi2 = epi[, .(peak_incidence = max(incidence), total_cases = sum(incidence)), by = .(run, virus, location, compartment, fIa, popK)]
 
-epi2 = merge(epi2, age_info, by.x = "location", by.y = "name")
+epi2 = merge(epi2, age_info[, .(name, mean_age, median_age)], by.x = "location", by.y = "name")
 epi2 = merge(epi2, cap$wc[, .(name, country = country.etc, iso2c = cc)], by.x = "location", by.y = "name")
 epi2 = merge(epi2, gbd, by = "iso2c")
 
@@ -135,8 +160,8 @@ f4Sa = ggplot() +
     labs(x = "Median age", y = "Attack rate per 1000 population", colour = "Region", shape = "Incidence") +
     guides(shape = guide_legend(nrow = 7, byrow = T), colour = guide_legend(nrow = 7, byrow = T)) +
     ylim(0, NA) +
-    facet_wrap(~fIa) +
-    theme(legend.position = "bottom") 
+    facet_wrap(~paste("f =", fIa)) +
+    theme(legend.position = "none", strip.background = element_blank()) 
 f4Sa
 ggsave(path("../Submission/FigS_countries_fIa_clinical_infections.pdf"), f4Sa, width = 18, height = 18, units = "cm", useDingbats = F)
 
@@ -157,11 +182,12 @@ ggsave(path("../Submission/Fig4a.pdf"), f4a, width = 10, height = 10, units = "c
 
 # Subclinical infections version
 epi = cap$epi[virus == "cov" & compartment == "subclinical"]
+epi = merge(epi, wc[, .(location = name, popK = pop / 1000)], by = "location")
 epi[, week := t %/% 7]
 epi = epi[, .(incidence = sum(cases)), by = .(run, virus, location, compartment, fIa, week, popK)]
 epi2 = epi[, .(peak_incidence = max(incidence), total_cases = sum(incidence)), by = .(run, virus, location, compartment, fIa, popK)]
 
-epi2 = merge(epi2, age_info, by.x = "location", by.y = "name")
+epi2 = merge(epi2, age_info[, .(name, mean_age, median_age)], by.x = "location", by.y = "name")
 epi2 = merge(epi2, cap$wc[, .(name, country = country.etc, iso2c = cc)], by.x = "location", by.y = "name")
 epi2 = merge(epi2, gbd, by = "iso2c")
 
@@ -179,8 +205,8 @@ f4Sai = ggplot() +
     labs(x = "Median age", y = "Subclinical attack rate per 1000 population", colour = "Region", shape = "Incidence") +
     guides(shape = guide_legend(nrow = 7, byrow = T), colour = guide_legend(nrow = 7, byrow = T)) +
     ylim(0, NA) +
-    facet_wrap(~fIa) +
-    theme(legend.position = "bottom") 
+    facet_wrap(~paste("f =", fIa)) +
+    theme(legend.position = "none", strip.background = element_blank()) 
 
 ggsave(path("../Submission/FigS_countries_fIa_subclinical_infections.pdf"), f4Sai, width = 18, height = 18, units = "cm", useDingbats = F)
 
@@ -195,7 +221,7 @@ f4ai = ggplot() +
     labs(x = "Median age", y = "Subclinical attack rate\nper 1000 population", colour = NULL, shape = NULL) +
     guides(shape = guide_legend(nrow = 7, byrow = T), colour = guide_legend(nrow = 7, byrow = T)) +
     ylim(0, NA) + txt_theme +
-    theme(legend.position = "none") 
+    theme(legend.position = "none", strip.background = element_blank()) 
 
 ggsave(path("../Submission/FigS_4a_subclinical_infections.pdf"), f4ai, width = 10, height = 10, units = "cm", useDingbats = F)
 
@@ -216,10 +242,12 @@ fR0f = ggplot(R0s, aes(x = median_age)) +
     labs(x = "Median age", y = expression(R[0])) +
     guides(shape = guide_legend(nrow = 7, byrow = T), colour = guide_legend(nrow = 7, byrow = T)) +
     ylim(0, NA) +
-    facet_wrap(~paste("f_Ia =", fIa)) +
-    theme(legend.position = "none", strip.background = element_blank()) 
+    facet_wrap(~paste("f =", fIa)) +
+    theme(legend.position = "bottom", strip.background = element_blank()) 
 
 ggsave(path("../Submission/FigS_R0s.pdf"), fR0f, width = 12, height = 5, units = "cm", useDingbats = F)
+
+ggsave(path("../Submission/FigS_4.pdf"), plot_grid(f4Sa, f4Sai, fR0f, nrow = 3, rel_heights = c(1, 1, 1.5)), width = 12, height = 20, units = "cm", useDingbats = F)
 
 # Just 0.5
 fR0 = ggplot(R0s[fIa == 0.5], aes(x = median_age)) + 
@@ -235,9 +263,9 @@ ggsave(path("../Submission/Fig4c.pdf"), fR0, width = 6, height = 6, units = "cm"
 
 f4 = plot_grid(
     f4a,
-    plot_grid(f4ai, fR0, f4b, ncol = 1, labels = c("b", "c", "d"), label_size = 9, label_x = -0.05, align = "hv", axis = "b"),
+    plot_grid(f4ai, fR0, f4b, ncol = 1, labels = c("b", "c", "d"), rel_heights = c(1, 0.9, 1.1), label_size = 9, label_x = -0.05, align = "hv", axis = "lb"),
     f4c, 
-    nrow = 1, rel_widths = c(5, 3, 4), labels = c("a", "", "e"), label_size = 9)
+    nrow = 1, rel_widths = c(10, 5, 8), labels = c("a", "", "e"), label_size = 9)
 
 ggsave(path("../Submission/Fig4.pdf"), f4, width = 22, height = 10, units = "cm", useDingbats = F)
 
@@ -295,7 +323,7 @@ mean_ci = function(x, ci = 0.95)
 }
 
 # Load and process data
-cap = cm_load(path("4-capitals-fix-u-lowincome.qs"))
+cap = cm_load(path("4-capitals-lowincome-fix-u-fIa0.5.qs"))
 gbd = fread("~/Dropbox/nCoV/gbd.regions.txt");
 gbd$iso2c = countrycode(gbd$Country, origin = "country.name", dest = "iso2c")
 
@@ -316,29 +344,27 @@ mean_age = cap$mean_age
 theme_set(theme_cowplot(font_size = 7, font_family = "Helvetica", line_size = 0.25))
 
 # B. Wiggly plot
-res2 = cap$epi[compartment == "cases" & virus == "cov" & schools == "open" & fIa == 0.5]
-pd = res2[, .(peak_day = which.max(cases) - 1), by = location]
+res2 = cap0.5$cases_age
+res2[, run := rep(rep(1:50, each = 3), 146 * 732)]
+res2 = res2[, .(cases = mean(cases)), by = .(t, location, age)]
+res2 = merge(res2, res2[, .(totcases = sum(cases)), by = .(t, location)])
+pd = res2[, .(peak_day = (which.max(totcases) - 1) / 3), keyby = .(location)]
 res2 = merge(res2, pd, by = "location")
-ma2 = mean_age[what == "cases" & virus == "cov" & fIa == 0.5]
-ma2 = merge(ma2, pd, by = "location")
-
-res2 = merge(res2, cap$wc[, .(name, country = country.etc, iso2c = cc)], by.x = "location", by.y = "name")
+res2 = merge(res2, cap$wc[, .(name, country = country.etc, iso2c = cc, pop)], by.x = "location", by.y = "name")
 res2 = merge(res2, gbd, by = "iso2c")
 
-ma2 = merge(ma2, cap$wc[, .(name, country = country.etc, iso2c = cc)], by.x = "location", by.y = "name")
-ma2 = merge(ma2, gbd, by = "iso2c")
+f4b = ggplot(res2[totcases/pop > 5/100000]) + 
+    geom_line(aes(x = t - peak_day, y = 100 * cases/totcases, colour = SuperRegionA, group = location), size = 0.25, alpha = 0.5) +
+    facet_grid(age~., switch = "y") +
+    xlim(-40, 40) +
+    theme(legend.position = "none", strip.background = element_blank(), strip.placement = "outside") +
+    labs(x = "Time relative to peak (days)", y = "Proportion of cases\nin age group (%)")
 
-f4b = ggplot() +
-    geom_line(data = ma2[t - peak_day < 200], aes(x = t - peak_day, y = mean_age, colour = SuperRegionA, group = location), alpha = 0.5, size = 0.25) +
-    geom_line(data = res2[t - peak_day < 200], aes(t - peak_day, cases/popK, group = location, colour = SuperRegionA), alpha = 0.5, size = 0.25) +
-    theme(legend.position = "none") +
-    labs(x = "Time relative to peak (days)", y = "Mean age of cases +\nClinical cases per 1000 population")
-
-ggsave(path("../Submission/Supp Figs/LowIncomeFig4b.pdf"), f4a, width = 10, height = 12, units = "cm", useDingbats = F)
+ggsave(path("../Submission/Supp Figs/LowIncomeFig4b.pdf"), f4b, width = 10, height = 12, units = "cm", useDingbats = F)
 
 
 # C. Distribution of cases by country / region
-dist = merge(dist, cap$wc[, .(name, country = country.etc, iso2c = cc)], by.x = "location", by.y = "name")
+dist = merge(dist, cap$wc[, .(name, country = country.etc, iso2c = cc, popK = pop / 1000)], by.x = "location", by.y = "name")
 dist = merge(dist, gbd, by = "iso2c")
 dist[, age_mid := as.numeric(str_sub(age, 1, 2)) + 5]
 
@@ -346,10 +372,10 @@ dist[period == "early", period := "Early"]
 dist[period == "middle", period := "Middle"]
 dist[period == "late", period := "Late"]
 
-dist = merge(dist, worldbank, by = "iso2c", all.x = T)
+dist = dist[, cm_mean_hdi(cases/popK), by = .(virus, fIa, period, age_mid, country, SuperRegionA)]
 
 f4c = ggplot(dist[virus == "cov" & fIa == 0.5 & period != "Middle"]) + 
-    geom_line(aes(x = age_mid, y = cases/popK, group = country, colour = SuperRegionA), alpha = 0.2, size = 0.25) +
+    geom_line(aes(x = age_mid, y = mean, group = country, colour = SuperRegionA), alpha = 0.2, size = 0.25) +
     facet_grid(SuperRegionA~period) +
     theme(legend.position = "none", strip.background = element_blank()) +
     labs(x = "Age", y = "Clinical cases per 1000 population") +
@@ -367,79 +393,61 @@ ggsave(path("../Submission/Supp Figs/LowIncomeFig4c.pdf"), f4c, width = 7, heigh
 
 # A. Scatter plot
 epi = cap$epi[virus == "cov" & compartment == "cases"]
+epi = merge(epi, wc[, .(location = name, popK = pop / 1000)], by = "location")
 epi[, week := t %/% 7]
-epi = epi[, .(incidence = sum(cases)), by = .(virus, location, compartment, fIa, week, popK)]
-epi2 = epi[, .(peak_incidence = max(incidence), total_cases = sum(incidence)), by = .(virus, location, compartment, fIa, popK)]
+epi = epi[, .(incidence = sum(cases)), by = .(run, virus, location, compartment, fIa, week, popK)]
+epi2 = epi[, .(peak_incidence = max(incidence), total_cases = sum(incidence)), by = .(run, virus, location, compartment, fIa, popK)]
 
-epi2 = merge(epi2, age_info, by.x = "location", by.y = "name")
+epi2 = merge(epi2, age_info[, .(name, mean_age, median_age)], by.x = "location", by.y = "name")
 epi2 = merge(epi2, cap$wc[, .(name, country = country.etc, iso2c = cc)], by.x = "location", by.y = "name")
 epi2 = merge(epi2, gbd, by = "iso2c")
-epi2 = merge(epi2, worldbank, by = "iso2c", all.x = T)
+epi2 = merge(epi2, worldbank[, .(iso2c, income)], by = "iso2c")
 
-# Version with 3 panels
-f4Sa = ggplot(epi2, aes(x = median_age)) + 
-    geom_smooth(aes(y = peak_incidence / popK, group = income, linetype = income), method = "lm", colour = "black", alpha = 0.5, size = .5) +
-    geom_point(aes(y = peak_incidence / popK, shape = "peak", colour = SuperRegion), alpha = 0.75) +
-    geom_smooth(aes(y = total_cases / popK, group = income, linetype = income), method = "lm", colour = "black", alpha = 0.5, size = .5) +
-    geom_point(aes(y = total_cases / popK, shape = "total", colour = SuperRegion), alpha = 0.75) +
-    scale_shape_manual(values = c("total" = 16, "peak" = 17)) +
-    labs(x = "Median age", y = "Attack rate per 1000 population", colour = "Region", shape = "Incidence") +
-    guides(shape = guide_legend(nrow = 7, byrow = T), colour = guide_legend(nrow = 7, byrow = T)) +
-    ylim(0, NA) +
-    facet_wrap(~fIa) +
-    theme(legend.position = "bottom") 
+epi2p = epi2[, cm_mean_hdi(peak_incidence / popK), by = .(median_age, virus, location, compartment, fIa, popK, SuperRegion, income)]
+epi2t = epi2[,    cm_mean_hdi(total_cases / popK), by = .(median_age, virus, location, compartment, fIa, popK, SuperRegion, income)]
 
-ggsave(path("../Submission/Supp Figs/LowIncomeFigS_countries_fIa_clinical_infections.pdf"), f4Sa, width = 18, height = 10, units = "cm", useDingbats = F)
-
-f4a = ggplot(epi2[fIa == 0.5], aes(x = median_age)) + 
-    geom_smooth(aes(y = peak_incidence / popK, group = income, linetype = income), method = "lm", colour = "black", alpha = 0.5, size = .5) +
-    geom_point(aes(y = peak_incidence / popK, shape = "peak", colour = SuperRegion), alpha = 0.75) +
-    geom_smooth(aes(y = total_cases / popK, group = income, linetype = income), method = "lm", colour = "black", alpha = 0.5, size = .5) +
-    geom_point(aes(y = total_cases / popK, shape = "total", colour = SuperRegion), alpha = 0.75) +
+f4a = ggplot() + 
+    geom_smooth     (data = epi2p[fIa == 0.5], aes(median_age, mean, linetype = income), method = "lm", colour = "black", alpha = 0.5, size = 0.5) +
+    geom_linerange  (data = epi2p[fIa == 0.5], aes(median_age, ymin = lower, ymax = upper, colour = SuperRegion), alpha = 0.25, size = 0.25) +
+    geom_point      (data = epi2p[fIa == 0.5], aes(median_age, mean, shape = "peak", colour = SuperRegion), alpha = 0.75, size = 2) +
+    geom_smooth     (data = epi2t[fIa == 0.5], aes(median_age, mean, linetype = income), method = "lm", colour = "black", alpha = 0.5, size = 0.5) +
+    geom_linerange  (data = epi2t[fIa == 0.5], aes(median_age, ymin = lower, ymax = upper, colour = SuperRegion), alpha = 0.25, size = 0.25) +
+    geom_point      (data = epi2t[fIa == 0.5], aes(median_age, mean, shape = "total", colour = SuperRegion), alpha = 0.75, size = 2) +
     scale_shape_manual(values = c("total" = 16, "peak" = 17), breaks = c("total", "peak"), labels = c("Total", "Peak")) +
     labs(x = "Median age", y = "Clinical attack rate per 1000 population", colour = NULL, shape = NULL) +
     guides(shape = guide_legend(nrow = 7, byrow = T), colour = guide_legend(nrow = 7, byrow = T)) +
     ylim(0, 600) + txt_theme +
     theme(legend.position = c(0.03, 0.888), legend.key.height = unit(0.15, "cm"), legend.box = "horizontal") 
 
-ggsave(path("../Submission/Supp Figs/LowIncomeFig4a.pdf"), f4a, width = 10, height = 10, units = "cm", useDingbats = F)
+ggsave(path("../Submission/LowIncomeFig4a.pdf"), f4a, width = 10, height = 10, units = "cm", useDingbats = F)
 
 # Subclinical infections version
 epi = cap$epi[virus == "cov" & compartment == "subclinical"]
+epi = merge(epi, wc[, .(location = name, popK = pop / 1000)], by = "location")
 epi[, week := t %/% 7]
-epi = epi[, .(incidence = sum(cases)), by = .(virus, location, fIa, week, popK)]
-epi2 = epi[, .(peak_incidence = max(incidence), total_cases = sum(incidence)), by = .(virus, location, fIa, popK)]
+epi = epi[, .(incidence = sum(cases)), by = .(run, virus, location, compartment, fIa, week, popK)]
+epi2 = epi[, .(peak_incidence = max(incidence), total_cases = sum(incidence)), by = .(run, virus, location, compartment, fIa, popK)]
 
-epi2 = merge(epi2, age_info, by.x = "location", by.y = "name")
+epi2 = merge(epi2, age_info[, .(name, mean_age, median_age)], by.x = "location", by.y = "name")
 epi2 = merge(epi2, cap$wc[, .(name, country = country.etc, iso2c = cc)], by.x = "location", by.y = "name")
 epi2 = merge(epi2, gbd, by = "iso2c")
 epi2 = merge(epi2, worldbank, by = "iso2c", all.x = T)
 
-f4Sai = ggplot(epi2, aes(x = median_age)) + 
-    geom_smooth(aes(y = peak_incidence / popK, group = income, linetype = income), method = "lm", colour = "black", alpha = 0.5, size = .5) +
-    geom_point(aes(y = peak_incidence / popK, shape = "peak", colour = SuperRegion), alpha = 0.75) +
-    geom_smooth(aes(y = total_cases / popK, group = income, linetype = income), method = "lm", colour = "black", alpha = 0.5, size = .5) +
-    geom_point(aes(y = total_cases / popK, shape = "total", colour = SuperRegion), alpha = 0.75) +
-    scale_shape_manual(values = c("total" = 16, "peak" = 17)) +
-    labs(x = "Median age", y = "Subclinical attack rate per 1000 population", colour = "Region", shape = "Incidence") +
-    guides(shape = guide_legend(nrow = 7, byrow = T), colour = guide_legend(nrow = 7, byrow = T)) +
-    ylim(0, NA) +
-    facet_wrap(~fIa) +
-    theme(legend.position = "bottom") 
+epi2p = epi2[, cm_mean_hdi(peak_incidence / popK), by = .(median_age, virus, location, compartment, fIa, popK, SuperRegion, income)]
+epi2t = epi2[,    cm_mean_hdi(total_cases / popK), by = .(median_age, virus, location, compartment, fIa, popK, SuperRegion, income)]
 
-ggsave(path("../Submission/Supp Figs/LowIncomeFigS_countries_fIa_subclinical_infections.pdf"), f4Sai, width = 18, height = 10, units = "cm", useDingbats = F)
-
-f4ai = ggplot(epi2[fIa == 0.5], aes(x = median_age)) + 
-    geom_smooth(aes(y = peak_incidence / popK, group = income, linetype = income), method = "lm", colour = "black", alpha = 0.5, size = .5) +
-    geom_point(aes(y = peak_incidence / popK, shape = "peak", colour = SuperRegion), alpha = 0.75) +
-    geom_smooth(aes(y = total_cases / popK, group = income, linetype = income), method = "lm", colour = "black", alpha = 0.5, size = .5) +
-    geom_point(aes(y = total_cases / popK, shape = "total", colour = SuperRegion), alpha = 0.75) +
+f4ai = ggplot() + 
+    geom_smooth     (data = epi2p[fIa == 0.5], aes(median_age, mean, linetype = income), method = "lm", colour = "black", alpha = 0.5, size = 0.5) +
+    geom_linerange  (data = epi2p[fIa == 0.5], aes(median_age, ymin = lower, ymax = upper, colour = SuperRegion), alpha = 0.25, size = 0.25) +
+    geom_point      (data = epi2p[fIa == 0.5], aes(median_age, mean, shape = "peak", colour = SuperRegion), alpha = 0.75, size = 1) +
+    geom_smooth     (data = epi2t[fIa == 0.5], aes(median_age, mean, linetype = income), method = "lm", colour = "black", alpha = 0.5, size = 0.5) +
+    geom_linerange  (data = epi2t[fIa == 0.5], aes(median_age, ymin = lower, ymax = upper, colour = SuperRegion), alpha = 0.25, size = 0.25) +
+    geom_point      (data = epi2t[fIa == 0.5], aes(median_age, mean, shape = "total", colour = SuperRegion), alpha = 0.75, size = 1) +
     scale_shape_manual(values = c("total" = 16, "peak" = 17), breaks = c("total", "peak"), labels = c("Total", "Peak")) +
     labs(x = "Median age", y = "Subclinical attack rate\nper 1000 population", colour = NULL, shape = NULL) +
     guides(shape = guide_legend(nrow = 7, byrow = T), colour = guide_legend(nrow = 7, byrow = T)) +
     ylim(0, NA) + txt_theme +
-    theme(legend.position = "none") 
-
+    theme(legend.position = "none", strip.background = element_blank()) 
 ggsave(path("../Submission/Supp Figs/LowIncomeFigS_4a_subclinical_infections.pdf"), f4ai, width = 10, height = 10, units = "cm", useDingbats = F)
 
 
@@ -450,22 +458,13 @@ R0s = merge(R0s, cap$wc[, .(name, country = country.etc, iso2c = cc)], by.x = "l
 R0s = merge(R0s, gbd, by = "iso2c")
 R0s = merge(R0s, worldbank, by = "iso2c", all.x = T)
 
-# by fIa
-fR0f = ggplot(R0s, aes(x = median_age)) + 
-    geom_smooth(aes(y = R0, group = income, linetype = income), method = "lm", colour = "black", alpha = 0.5, size = 0.5) +
-    geom_point(aes(y = R0, colour = SuperRegion), alpha = 0.75) +
-    labs(x = "Median age", y = expression(R[0])) +
-    guides(shape = guide_legend(nrow = 7, byrow = T), colour = guide_legend(nrow = 7, byrow = T)) +
-    ylim(0, NA) +
-    facet_wrap(~paste("f_Ia =", fIa)) +
-    theme(legend.position = "none", strip.background = element_blank()) 
-
-ggsave(path("../Submission/Supp Figs/LowIncomeFigS_R0s.pdf"), fR0f, width = 12, height = 5, units = "cm", useDingbats = F)
+R0s = R0s[, cm_mean_hdi(R0), by = .(median_age, virus, location, fIa, SuperRegion, income)]
 
 # Just 0.5
 fR0 = ggplot(R0s[fIa == 0.5], aes(x = median_age)) + 
-    geom_smooth(aes(y = R0, group = income, linetype = income), method = "lm", colour = "black", alpha = 0.5, size = 0.5) +
-    geom_point(aes(y = R0, colour = SuperRegion), alpha = 0.75) +
+    geom_smooth(aes(y = mean, linetype = income), method = "lm", colour = "black", alpha = 0.5, size = 0.5) +
+    geom_linerange(aes(ymin = lower, ymax = upper, colour = SuperRegion), alpha = 0.5, size = 0.5) +
+    geom_point(aes(y = mean, colour = SuperRegion), alpha = 0.25, size = .75) +
     labs(x = "Median age", y = expression(R[0])) +
     guides(shape = guide_legend(nrow = 7, byrow = T), colour = guide_legend(nrow = 7, byrow = T)) +
     ylim(0, NA) +
@@ -474,10 +473,10 @@ fR0 = ggplot(R0s[fIa == 0.5], aes(x = median_age)) +
 ggsave(path("../Submission/Supp Figs/LowIncomeFig4c.pdf"), fR0, width = 6, height = 6, units = "cm", useDingbats = F)
 
 f4 = plot_grid(
-    f4a,
-    plot_grid(f4ai, fR0, f4b, ncol = 1, labels = c("b", "c", "d"), label_size = 9, label_x = -0.05, align = "hv", axis = "b"),
+    plot_grid(ggdraw(), f4a, ncol = 1, labels = c("a", "b"), label_size = 9, rel_heights = c(3, 7)),
+    plot_grid(f4ai, fR0, f4b, ncol = 1, labels = c("c", "d", "e"), rel_heights = c(1, 0.9, 1.1), label_size = 9, label_x = -0.05, align = "hv", axis = "lb"),
     f4c, 
-    nrow = 1, rel_widths = c(5, 3, 4), labels = c("a", "", "e"), label_size = 9)
+    nrow = 1, rel_widths = c(10, 5, 8), labels = c("f", "", "g"), label_size = 9)
 
 ggsave(path("../Submission/Supp Figs/LowIncomeFig4.pdf"), f4, width = 22, height = 10, units = "cm", useDingbats = F)
 }

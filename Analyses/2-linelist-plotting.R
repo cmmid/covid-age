@@ -17,9 +17,10 @@ library(cowplot)
 path = function(x, prefix = "~/Dropbox/nCoV/Analyses/") { paste0(prefix, x); }
 
 # covidm options
-cm_path = "~/Dropbox/nCoV/covidm/";
+cm_path = "~/Documents/ncov_age/covidm/";
 cm_force_rebuild = F;
 cm_verbose = F;
+cm_version = 1;
 if (Sys.info()["nodename"] %like% "lshtm") {
     cm_build_dir = paste0(cm_path, "build/lshtm");
 }
@@ -84,34 +85,60 @@ it_age_dist = merge(it_age_dist, ci, by = c("date", "age"))
 it_age_dist = it_age_dist[, .(age = age, mean = N/sum(N), lower = lower/sum(N), upper = upper / sum(N)), by = date]
 
 # load validation fits
-bs = cm_load(path(paste0("2-linelist-validation-bs-fIa-", fIa, "-con.qs")));
-sk = cm_load(path(paste0("2-linelist-validation-sk-fIa-", fIa, "-con.qs")));
-it = cm_load(path(paste0("2-linelist-validation-lb-fIa-", fIa, "-con.qs")));
+bs = cm_load(path(paste0("2-linelist-validation-both-bs-fIa-", fIa, "-con.qs")));
+sk = cm_load(path(paste0("2-linelist-validation-both-sk-fIa-", fIa, "-con.qs")));
+it = cm_load(path(paste0("2-linelist-validation-both-lb-fIa-", fIa, "-con.qs")));
+
+summ_fit = function(f)
+{
+    f = melt(f$posterior[, .SD, .SDcols = 5:length(f$posterior)]);
+    f = f[, cm_mean_hdi(value), by = variable]
+    f = f[, paste0(signif(mean, 2), " (", signif(lower, 2), "-", signif(upper, 2), ")\n")]
+    for (i in 1:length(f)) {
+        cat(f[i])
+    }
+}
+summ_fit(bs)
+summ_fit(sk)
+summ_fit(it)
 
 # load posteriors from fitting
-fitted_symp = qread(path(paste0("2-linelist_symp_fit_fIa", fIa, ".qs")));
-fitted_symp_mean = unname(unlist(fitted_symp[, lapply(.SD, mean), .SDcols = f_00:f_70]))
+fitted = qread(path(paste0("2-linelist_both_fit_fIa", fIa, "-rbzvih.qs")));
+fitted_symp_mean = unname(unlist(fitted[, lapply(.SD, mean), .SDcols = y_00:y_70]))
 fitted_symp_mean = rep(fitted_symp_mean, each = 2)
+fitted_susc_mean = unname(unlist(fitted[, lapply(.SD, mean), .SDcols = u_00:u_70]))
+fitted_susc_mean = rep(fitted_susc_mean, each = 2)
+
+# create table
+fitted[, .(mean = lapply(.SD, function(x) round(mean(x), 2))), .SDcols = u_00:y_70]
+fitted[, .(lapply(.SD, function(x) round(quantile(x, c(0.025, 0.25, 0.5, 0.75, 0.975)), 2))), .SDcols = u_00:y_70]
 
 bs_d = cm_sample_fit(bs, 100);
 sk_d = cm_sample_fit(sk, 100);
 it_d = cm_sample_fit(it, 100);
 
-bsi = cm_load(path(paste0("2-linelist-validation-bs-fIa-", fIa, "-ind.qs")));
-ski = cm_load(path(paste0("2-linelist-validation-sk-fIa-", fIa, "-ind.qs")));
-iti = cm_load(path(paste0("2-linelist-validation-lb-fIa-", fIa, "-ind.qs")));
+#
+bsi = cm_load(path(paste0("2-linelist-validation-both-bs-fIa-", fIa, "-ind.qs")));
+ski = cm_load(path(paste0("2-linelist-validation-both-sk-fIa-", fIa, "-ind.qs")));
+iti = cm_load(path(paste0("2-linelist-validation-both-lb-fIa-", fIa, "-ind.qs")));
 
-fitted_symp_ind = qread(path(paste0("2-linelist_symp_fit_ind_fIa", fIa, ".qs")));
-fitted_symp_mean = unname(unlist(fitted_symp_ind[location %like% "CCDC", lapply(.SD, mean), .SDcols = f_00:f_70]))
+fitted_ind = qread(path(paste0("2-linelist_mn_both_fit_ind_fIa", fIa, "-r.qs")));
+fitted_symp_mean = unname(unlist(fitted_ind[location %like% "CCDC", lapply(.SD, mean), .SDcols = y_00:y_70]))
 fitted_symp_mean = rep(fitted_symp_mean, each = 2)
+fitted_susc_mean = unname(unlist(fitted_ind[location %like% "CCDC", lapply(.SD, mean), .SDcols = u_00:u_70]))
+fitted_susc_mean = rep(fitted_susc_mean, each = 2)
 bs_di = cm_sample_fit(bsi, 100);
 
-fitted_symp_mean = unname(unlist(fitted_symp_ind[location == "South Korea", lapply(.SD, mean), .SDcols = f_00:f_70]))
+fitted_symp_mean = unname(unlist(fitted_ind[location == "South Korea", lapply(.SD, mean), .SDcols = y_00:y_70]))
 fitted_symp_mean = rep(fitted_symp_mean, each = 2)
+fitted_susc_mean = unname(unlist(fitted_ind[location == "South Korea", lapply(.SD, mean), .SDcols = u_00:u_70]))
+fitted_susc_mean = rep(fitted_susc_mean, each = 2)
 sk_di = cm_sample_fit(ski, 100);
 
-fitted_symp_mean = unname(unlist(fitted_symp_ind[location == "Lombardia", lapply(.SD, mean), .SDcols = f_00:f_70]))
+fitted_symp_mean = unname(unlist(fitted_ind[location == "Lombardia", lapply(.SD, mean), .SDcols = y_00:y_70]))
 fitted_symp_mean = rep(fitted_symp_mean, each = 2)
+fitted_susc_mean = unname(unlist(fitted_ind[location == "Lombardia", lapply(.SD, mean), .SDcols = u_00:u_70]))
+fitted_susc_mean = rep(fitted_susc_mean, each = 2)
 it_di = cm_sample_fit(iti, 100);
 
 # plotting
@@ -133,6 +160,8 @@ names(ll_colours) = ll_regions;
 ll_sets = c("Overall", "China (SHO)", "China (CCDC)", "Italy", "Lombardia", "Japan", "Singapore", "South Korea", "Canada")
 ll_set_colours = c("#666666", "#4394c3", "#6baed6", "#e65339", "#fdd09c", singles)
 names(ll_set_colours) = ll_sets;
+
+
 
 modelled = function(dynamics, comp, start_date)
 {
@@ -157,8 +186,11 @@ add_data = function(data, column, clr)
 
 redo_age = function(x, col = "age")
 {
-    x[, (col) := as.character(get(col))];
-    x[, (col) := str_replace_all(get(col), " ", "")];
+    ages = as.numeric(str_split(x[[col]], " |-|\\+", simplify = T)[,1]);
+    ages_lower = unique(ages);
+    ages_upper = c(paste0("-", tail(ages_lower, -1) - 1), "+")
+    age_ids = match(ages, ages_lower);
+    x[, (col) := paste0(..ages_lower[..age_ids], ..ages_upper[..age_ids])];
     x[, (col) := factor(get(col), levels = unique(get(col)))];
     return (x)
 }
@@ -233,10 +265,10 @@ epi1 = modelled(bs_all[population == 1], "cases_reported", bs$base_parameters$da
 epi2 = modelled(bs_all[population == 2], "cases_reported", bs$base_parameters$date0) +
     add_data(cases_S, "incidence") + labs(x = "Date", y = NULL, title = "Shanghai") + txt_theme
 
-epi3 = modelled(sk_all, "cases_reported", sk$base_parameters$date0) +
+epi3 = modelled(sk_all[t > 15], "cases_reported", sk$base_parameters$date0) +
     add_data(sk_confirmations, "n") + labs(x = "Date", y = NULL, title = "South Korea") + txt_theme
 
-epi4 = modelled(it_all, "cases_reported", it$base_parameters$date0) +
+epi4 = modelled(it_all[t > 30], "cases_reported", it$base_parameters$date0) +
     add_data(it_confirmations, "confirmations") + labs(x = "Date", y = NULL, title = "Lombardy") + txt_theme
 
 dist1 = case_dist(bs_all[population == 1], age_dist_B, bs$base_parameters$date0, "2020-03-01", c(0, 6, 18, 60, 100))
@@ -247,6 +279,7 @@ dist4 = case_dist(it_all, it_age_dist, it$base_parameters$date0, "2020-03-15", c
 f2c = plot_grid(epi1, epi2, epi3, epi4,
           dist1, dist2, dist3, dist4,
           nrow = 2, ncol = 4, rel_heights = c(1, 1), rel_widths = c(9, 8, 8, 8))
+f2c
 ggsave(path(paste0("../Submission/Fig2c_fIa", fIa, ".pdf")), f2c, width = 10, height = 8, units = "cm", useDingbats = F)
 
 
@@ -254,8 +287,8 @@ ggsave(path(paste0("../Submission/Fig2c_fIa", fIa, ".pdf")), f2c, width = 10, he
 get_ind = function(fIa)
 {
   age_dist = fread(path("age.csv"));
-  ind = qread(path(paste0("2-linelist_symp_fit_ind_fIa", fIa, ".qs")));
-  ind_expected = qread(path(paste0("2-linelist_symp_fit_ind_expected_fIa", fIa, ".qs")));
+  ind = qread(path(paste0("2-linelist_mn_both_fit_ind_fIa", fIa, "-r.qs")));
+  ind_expected = qread(path(paste0("2-linelist_both_expected_fIa", fIa, "-r.qs")));
   
   ind_expected = melt(ind_expected, id.vars = "location")
   ind_expected[, age_lower := as.numeric(str_sub(variable, 3))]
@@ -288,6 +321,7 @@ get_ind = function(fIa)
 theme_set(theme_cowplot(font_size = 7, font_family = "Helvetica", line_size = 0.25))
 
 ind = get_ind(fIa)
+ind = redo_age(ind)
 f2a = ggplot(ind) +
     geom_col(aes(x = age, y = cmean), fill = "#ffffff", colour = "#000000", size = 0.125) +
     geom_errorbar(aes(x = age, ymin = clower, ymax = cupper), size = 0.125, width = 0.2) +
@@ -303,18 +337,21 @@ ggsave(paste0("~/Dropbox/nCoV/Submission/Fig2a_fIa", fIa, ".pdf"), f2a, width = 
 
 
 # symp rate
-ind = qread(path(paste0("2-linelist_symp_fit_ind_fIa", fIa, ".qs")));
+ind = qread(path(paste0("2-linelist_mn_both_fit_ind_fIa", fIa, "-r.qs")));
 ind[, location := factor(location, levels = ll_regions)]
 
-ind = melt(ind[, 5:13], id.vars = "location")
-ind[, variable := as.numeric(str_sub(variable, 3))]
-ind2 = ind[, cm_mean_hdi(value), by = .(location, variable)]
+ind = melt(ind[, c(5:20, 23)], id.vars = "location")
+ind[, var := str_sub(variable, 1, 1)];
+ind[, age := as.numeric(str_sub(variable, 3))]
+ind[, variable := NULL]
+ind2 = ind[, cm_mean_hdi(value), by = .(location, var, age)]
 fS = ggplot(ind2) + 
-    geom_ribbon(aes(x = variable, ymin = lower, ymax = upper, fill = location), alpha = 0.25) +
-    geom_line(aes(x = variable, y = mean, colour = location)) +
+    geom_ribbon(aes(x = age + 5, ymin = lower, ymax = upper, fill = location, group = var), alpha = 0.25) +
+    geom_line(aes(x = age + 5, y = mean, colour = location, linetype = var), size = 0.25) +
     labs(x = "Age", y = "Clinical fraction") +
     facet_wrap(~location, ncol = 4) +
     scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.5, 1)) +
+    scale_linetype_manual(values = c("u" = "dashed", "y" = "solid")) +
     scale_fill_manual(values = ll_colours, aesthetics = c("fill", "colour")) +
     theme(axis.text.x = element_text(angle = 45, hjust = 1), strip.background = element_blank(), legend.position = "none")
 
@@ -324,23 +361,29 @@ ggsave(paste0("~/Dropbox/nCoV/Submission/FigS_symp_fIa", fIa, ".pdf"), fS, width
 # overall - run symp rate first
 isets = data.table(location = ll_regions, set = c(rep("China (SHO)", 13), rep("China (CCDC)", 3), rep("Italy", 12), "Japan", "Singapore", "South Korea", "Canada"))
 ind3 = merge(ind, isets, by = "location");
-ind3 = ind3[, cm_mean_hdi(value), by = .(set, variable)]
+ind3 = ind3[, cm_mean_hdi(value), by = .(set, var, age)]
 
-fitted_symp = qread(path(paste0("2-linelist_symp_fit_fIa", fIa, ".qs")));
-fs = melt(fitted_symp[, 5:12], id.vars = NULL)
-fs[, variable := as.numeric(str_sub(variable, 3))]
-fs2 = fs[, cm_mean_hdi(value), by = .(variable)]
+fitted_symp = qread(path(paste0("2-linelist_both_fit_fIa", fIa, "-rbzvih.qs")));
+fs = melt(fitted_symp[, 5:20], id.vars = NULL)
+fs[, var := str_sub(variable, 1, 1)];
+fs[, age := as.numeric(str_sub(variable, 3))]
+fs2 = fs[, cm_mean_hdi(value), by = .(var, age)]
 
 s_all = rbind(ind3, cbind(set = "Overall", fs2))
 s_all[, set := factor(set, levels = ll_sets)]
+s_all[var == "u", var := "Susceptibility"]
+s_all[var == "y", var := "Clinical fraction"]
 
 f2b = ggplot(s_all) + 
-    geom_line(aes(x = variable, y = mean, colour = set)) +
-    geom_ribbon(aes(x = variable, ymin = lower, ymax = upper, fill = set), alpha = 0.25) +
-    labs(x = "Age", y = "Clinical fraction") +
+    geom_ribbon(aes(x = age + 5, ymin = lower, ymax = upper, fill = set, group = var), alpha = 0.25) +
+    geom_line(aes(x = age + 5, y = mean, colour = set, linetype = var), size = 0.25) +
+    labs(x = "Age", y = "Clinical fraction + susceptibility", linetype = NULL) +
     facet_wrap(~set, nrow = 2, ncol = 4) +
+    scale_linetype_manual(values = c("Susceptibility" = "dotted", "Clinical fraction" = "solid")) +
     scale_fill_manual(values = ll_set_colours, aesthetics = c("fill", "colour")) +
-    theme(legend.position = "none", strip.background = element_blank())
+    theme(strip.background = element_blank(), legend.position = c(0.02, 0.6)) +
+    ylim(0, NA) + xlim(0, 80) +
+    guides(fill = "none", colour = "none", linetype = "legend")
 ggsave(paste0("~/Dropbox/nCoV/Submission/Fig2b_fIa", fIa, ".pdf"), f2b, width = 12, height = 6, unit = "cm", useDingbats = F)
 
 # overall figure 2
@@ -351,71 +394,48 @@ ggsave(paste0("~/Dropbox/nCoV/Submission/Fig2_fIa", fIa, ".pdf"), f2, width = 22
 
 
 # POSTERIORS
-cm_plot_posterior(cm_load(path("2-linelist-validation-bs-fIa-0.5-con.qs")))
-ggsave("~/Dropbox/nCoV/Submission/Supp Figs/posterior-bs-con.pdf", width = 12, height = 8, units = "cm", useDingbats = F)
-cm_plot_posterior(cm_load(path("2-linelist-validation-sk-fIa-0.5-con.qs")))
-ggsave("~/Dropbox/nCoV/Submission/Supp Figs/posterior-sk-con.pdf", width = 12, height = 8, units = "cm", useDingbats = F)
-cm_plot_posterior(cm_load(path("2-linelist-validation-lb-fIa-0.5-con.qs")))
-ggsave("~/Dropbox/nCoV/Submission/Supp Figs/posterior-lb-con.pdf", width = 12, height = 8, units = "cm", useDingbats = F)
+p1 = cm_plot_posterior(cm_load(path("2-linelist-validation-both-bs-fIa-0.5-ind.qs")))
+p2 = cm_plot_posterior(cm_load(path("2-linelist-validation-both-sk-fIa-0.5-ind.qs")))
+p3 = cm_plot_posterior(cm_load(path("2-linelist-validation-both-lb-fIa-0.5-ind.qs")))
+p = plot_grid(p1, p2, p3, ncol = 1, labels = c("a", "b", "c"), label_size = 8, rel_heights = c(3, 2.2, 3))
+ggsave("~/Dropbox/nCoV/Submission/Supp Figs/S-2-validation-posteriors.pdf", p, width = 12, height = 15, units = "cm", useDingbats = F)
 
-
-cm_plot_posterior(cm_load(path("2-linelist-validation-bs-fIa-0.5-ind.qs")))
-ggsave("~/Dropbox/nCoV/Submission/Supp Figs/posterior-bs-ind.pdf", width = 12, height = 8, units = "cm", useDingbats = F)
-cm_plot_posterior(cm_load(path("2-linelist-validation-sk-fIa-0.5-ind.qs")))
-ggsave("~/Dropbox/nCoV/Submission/Supp Figs/posterior-sk-ind.pdf", width = 12, height = 8, units = "cm", useDingbats = F)
-cm_plot_posterior(cm_load(path("2-linelist-validation-lb-fIa-0.5-ind.qs")))
-ggsave("~/Dropbox/nCoV/Submission/Supp Figs/posterior-lb-ind.pdf", width = 12, height = 8, units = "cm", useDingbats = F)
-
-q = cm_load(path("2-linelist_symp_fit_fIa0.5.qs"))
-q = melt(q, measure.vars = 5:13, id.vars = "ll")
-ggplot(q) + geom_histogram(aes(x = value, fill = variable), bins = 30) + facet_wrap(~variable, scales = "free") + 
+q = cm_load(path("2-linelist_both_fit_fIa0.5-rbzvih.qs"))
+q = melt(q, measure.vars = 5:23, id.vars = "ll")
+p = ggplot(q) + geom_histogram(aes(x = value, fill = variable), bins = 30) + facet_wrap(~variable, scales = "free", ncol = 6) + 
     theme(legend.position = "none", strip.background = element_blank())
-ggsave("~/Dropbox/nCoV/Submission/Supp Figs/posterior-symp-fit-con.pdf", width = 12, height = 8, units = "cm", useDingbats = F)
+ggsave("~/Dropbox/nCoV/Submission/Supp Figs/S-posterior-both-fit-con.pdf", p, width = 20, height = 8, units = "cm", useDingbats = F)
 
 
 
 
 # how clinical fraction changes with fIa plot
 
-if (0) {
-
 data = NULL
-for (fIa in c(0, 0.25, 0.5, 0.75)) {
-    # Individual
-    ind = qread(path(paste0("2-linelist_symp_fit_ind_fIa", fIa, ".qs")));
-    ind[, location := factor(location, levels = ll_regions)];
-
-    ind = melt(ind[, 5:13], id.vars = "location");
-    ind[, variable := as.numeric(str_sub(variable, 3))];
-    ind[, fIa := fIa];
-
-    # overall
-    isets = data.table(location = ll_regions, set = c(rep("China (SHO)", 13), rep("China (CCDC)", 3), rep("Italy", 12), "Japan", "Singapore", "South Korea", "Canada"))
-    ind3 = merge(ind, isets, by = "location");
-    ind3 = ind3[, cm_mean_hdi(value), by = .(set, variable, fIa)]
-
-    fitted_symp = qread(path(paste0("2-linelist_symp_fit_fIa", fIa, ".qs")));
-    fs = melt(fitted_symp[, 5:12], id.vars = NULL)
-    fs[, variable := as.numeric(str_sub(variable, 3))]
+for (fIa in c(0, 0.25, 0.5, 0.75, 1.0)) {
+    fitted_symp = qread(path(paste0("2-linelist_both_fit_fIa", fIa, "-rbzvih.qs")));
+    fs = melt(fitted_symp[, 5:20], id.vars = NULL)
+    fs[, age := as.numeric(str_sub(variable, 3))]
+    fs[, var := str_sub(variable, 1, 1)]
     fs[, fIa := fIa]
-    fs2 = fs[, cm_mean_hdi(value), by = .(variable, fIa)]
+    fs2 = fs[, cm_mean_hdi(value), by = .(age, var, fIa)]
 
-    s_all = rbind(ind3, cbind(set = "Overall", fs2))
-    
-    data = rbind(data, s_all)
+    data = rbind(data, cbind(set = "Overall", fs2))
 }
 
 data[, set := factor(set, levels = ll_sets)]
+data[var == "u", var := "Susceptibility"]
+data[var == "y", var := "Clinical fraction"]
 
 big_fig = ggplot(data) + 
-    geom_line(aes(x = variable, y = mean, colour = set, linetype = as.factor(fIa), group = paste(set, fIa)), size = 0.3) +
-    geom_ribbon(aes(x = variable, ymin = lower, ymax = upper, fill = set, group = paste(set, fIa)), alpha = 0.125) +
-    labs(x = "Age", y = "Clinical fraction", fill = "Set", colour = "Set", linetype = "Asymptomatic infectiousness") +
-    facet_wrap(~set, nrow = 2, ncol = 4) +
-    scale_linetype_manual(values = c("solid", "82", "5313", "11")) +
+    geom_line(aes(x = age + 5, y = mean, linetype = as.factor(fIa), group = fIa), size = 0.3) +
+    geom_ribbon(aes(x = age + 5, ymin = lower, ymax = upper, group = fIa), alpha = 0.125) +
+    labs(x = "Age", y = "Clinical fraction", linetype = "Subclinical infectiousness") +
+    facet_wrap(~var, nrow = 2, ncol = 4) +
+    scale_linetype_manual(values = c("solid", "82", "4212", "22", "11")) +
     scale_fill_manual(values = ll_set_colours, aesthetics = c("fill", "colour")) +
-    theme(strip.background = element_blank(), legend.key.width = unit(1, "cm"))
+    theme(strip.background = element_blank(), legend.key.width = unit(1, "cm"), legend.position = "bottom") +
+    ylim(0, 1)
 
-ggsave(paste0("~/Dropbox/nCoV/Submission/Supp Figs/FigS-fIa_symp.pdf"), big_fig, width = 20, height = 6, unit = "cm", useDingbats = F)
+ggsave(paste0("~/Dropbox/nCoV/Submission/Supp Figs/FigS-fIa_symp.pdf"), big_fig, width = 12, height = 5, unit = "cm", useDingbats = F)
 
-}

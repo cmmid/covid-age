@@ -9,6 +9,7 @@ path = function(x, prefix = "~/Dropbox/nCoV/Analyses/") { paste0(prefix, x); }
 # covidm options
 cm_path = "~/Dropbox/nCoV/covidm/";
 cm_force_rebuild = F;
+cm_version = 1;
 if (Sys.info()["nodename"] %like% "lshtm") {
     cm_builddir = paste0(cm_path, "build/lshtm");
 }
@@ -17,8 +18,10 @@ source(path("R/covidm.R", cm_path))
 flu_scenario = data.table(read_excel(path("../flu_scenario_v3.xlsx")));
 flu_scenario[, Susceptibility := OldSusc]
 flu_scenario[, Severity := scaled_newSev]
-covid_scenario = qread(path("2-linelist_symp_fit_fIa0.5.qs"));
-variability = mean(unlist(covid_scenario[, lapply(.SD, function(x) sd(x)/mean(x)), .SDcols = f_00:f_70]));
+# #-#covid_scenario = qread(path("2-linelist_symp_fit_fIa0.5.qs"));
+# covid_scenario = qread(path("2-linelist_rbvzi.qs"));
+# #-#variability = mean(unlist(covid_scenario[, lapply(.SD, function(x) sd(x)/mean(x)), .SDcols = f_00:f_70]));
+# variability = mean(unlist(covid_scenario[, lapply(.SD, function(x) sd(x)/mean(x)), .SDcols = y_00:y_70]));
 matrices = readRDS(path("../all_matrices.rds"));
 
 # for setting R0
@@ -58,10 +61,10 @@ parameters = function(pop_region, mat_region, virus, u, R0, fIa, report, qS, dyn
     pop = list();
     pop$type = "SEI3R";
     
-    pop$dE  = cm_delay_gamma(4.0, 4.0, t_max = 60, t_step = 0.25)$p # Derived from Backer et al Eurosurveillance
-    pop$dIp = cm_delay_gamma(2.4, 4.0, t_max = 60, t_step = 0.25)$p # Derived from Backer et al Eurosurveillance
-    pop$dIa = cm_delay_gamma(7.0, 4.0, t_max = 60, t_step = 0.25)$p # Assumed 7 days subclinical shedding
-    pop$dIs = cm_delay_gamma(3.2, 3.7, t_max = 60, t_step = 0.25)$p # Zhang et al 2020
+    pop$dE  = cm_delay_gamma(3.0, 4.0, t_max = 60, t_step = 0.25)$p # Derived from He et al (44% infectiousness presymptomatic) https://www.nature.com/articles/s41591-020-0869-5#Sec9
+    pop$dIp = cm_delay_gamma(2.1, 4.0, t_max = 60, t_step = 0.25)$p # Derived from Lauer et al (5.1 day incubation period) https://www.ncbi.nlm.nih.gov/pubmed/32150748
+    pop$dIs = cm_delay_gamma(2.9, 4.0, t_max = 60, t_step = 0.25)$p # 5 days total: 5.5 day serial interval
+    pop$dIa = cm_delay_gamma(5.0, 4.0, t_max = 60, t_step = 0.25)$p # Assumed same infectious period as clinical cases
     pop$dH  = c(1, 0); # hospitalization ignored
     pop$dC  = c(1, 0); # cases are reported immediately -- because fitting is retrospective to case onset.
     
@@ -85,14 +88,19 @@ parameters = function(pop_region, mat_region, virus, u, R0, fIa, report, qS, dyn
         pop$y = c(flu_scenario$Severity[1:(n_age_groups - 1)], mean(flu_scenario$Severity[n_age_groups:nrow(flu_scenario)]));
         pop$y = pmax(0, pmin(1, pop$y * rnorm(length(pop$y), 1, variability)));
     } else {
-        pop$u = rep(0.1, n_age_groups);
-        covy = unname(unlist(covid_scenario[sample.int(nrow(covid_scenario), 1), f_00:f_70]));
+        srow = sample.int(nrow(covid_scenario), 1)
+        covu = unname(unlist(covid_scenario[srow, u_00:u_70]));
+        covu = unname(rep(covu, each = 2))
+        covy = unname(unlist(covid_scenario[srow, y_00:y_70]));
         covy = unname(rep(covy, each = 2))
         if (length(covy) < n_age_groups) {
             covy = c(covy, rep(tail(covy, 1), n_age_groups - length(covy)));
+            covu = c(covu, rep(tail(covu, 1), n_age_groups - length(covu)));#-#
         } else if (n_age_groups < length(covy)) {
             covy = c(covy[1:(n_age_groups - 1)], mean(covy[n_age_groups:length(covy)]));
+            covu = c(covu[1:(n_age_groups - 1)], mean(covu[n_age_groups:length(covu)]));#-#
         }
+        pop$u = covu;#-#
         pop$y = covy;
     }
 
@@ -110,7 +118,7 @@ parameters = function(pop_region, mat_region, virus, u, R0, fIa, report, qS, dyn
         if (virus == "flu") {
             pop$u = u * c(flu_scenario$Susceptibility[1:(n_age_groups - 1)], mean(flu_scenario$Susceptibility[n_age_groups:nrow(flu_scenario)]));
         } else {
-            pop$u = rep(u, n_age_groups);
+            pop$u = u * covu / mean(covu);
         }
     }
 
@@ -162,30 +170,26 @@ results = NULL;
 distrib = NULL;
 R0s = NULL;
 nsamp = 100;
-for (fIa in c(0, 0.25, 0.5, 0.75)) {
+
+for (fIa in c(0, 0.5, 1.0)) {
     print(fIa);
-    covid_scenario = qread(path(paste0("2-linelist_symp_fit_fIa", fIa, ".qs")));
-    variability = mean(unlist(covid_scenario[, lapply(.SD, function(x) sd(x)/mean(x)), .SDcols = f_00:f_70]));
+    covid_scenario = qread(path(paste0("2-linelist_both_fit_fIa", fIa, "-rbzvih.qs")));
+    variability = mean(unlist(covid_scenario[, lapply(.SD, function(x) sd(x)/mean(x)), .SDcols = u_00:u_70]));
     
     if (a_R0 < 0) {
         if (fIa == 0) {
-            u_flu = 0.985;
-            u_cov = 0.077;
-            R0_flu = -1;
-            R0_cov = -1;
-        } else if (fIa == 0.25) {
-            u_flu = 0.148;
-            u_cov = 0.053;
+            u_flu = 1.310;
+            u_cov = 0.1055;
             R0_flu = -1;
             R0_cov = -1;
         } else if (fIa == 0.5) {
-            u_flu = 0.076;
-            u_cov = 0.039;
+            u_flu = 0.127;
+            u_cov = 0.0627;
             R0_flu = -1;
             R0_cov = -1;
         } else {
-            u_flu = 0.051;
-            u_cov = 0.03;
+            u_flu = 0.0647;
+            u_cov = 0.0429;
             R0_flu = -1;
             R0_cov = -1;
         }
@@ -202,25 +206,25 @@ for (fIa in c(0, 0.25, 0.5, 0.75)) {
             cat(".");
             p = cm_translate_parameters(parameters(pop_regions[i], mat_regions[i], "flu", u_flu, R0_flu, fIa, 1, 1));
             R0s = rbind(R0s, data.table(virus = "flu", a_u = a_u, a_R0 = a_R0, fIa = fIa, location = loc_names[i], R0 = cm_calc_R0(p, 1)));
-            dynFO = cm_backend_simulate(p);
+            dynFO = cm_backend_simulate(p)[[1]][[1]];
             setDT(dynFO);
-            dynFO = melt(dynFO, id.vars = c("run", "t", "population", "group"), variable.name = "compartment", value.name = "value");
+            dynFO = melt(dynFO, id.vars = c("t", "population", "group"), variable.name = "compartment", value.name = "value");
 
             p = cm_translate_parameters(parameters(pop_regions[i], mat_regions[i], "flu", u_flu, R0_flu, fIa, 1, 0, dynFO, thousands[location == loc_names[i], popK] * 0.01))
-            dynFC = cm_backend_simulate(p);
+            dynFC = cm_backend_simulate(p)[[1]][[1]];
             setDT(dynFC);
-            dynFC = melt(dynFC, id.vars = c("run", "t", "population", "group"), variable.name = "compartment", value.name = "value");
+            dynFC = melt(dynFC, id.vars = c("t", "population", "group"), variable.name = "compartment", value.name = "value");
 
             p = cm_translate_parameters(parameters(pop_regions[i], mat_regions[i], "cov", u_cov, R0_cov, fIa, 1, 1));
             R0s = rbind(R0s, data.table(virus = "cov", a_u = a_u, a_R0 = a_R0, fIa = fIa, location = loc_names[i], R0 = cm_calc_R0(p, 1)));
-            dynCO = cm_backend_simulate(p);
+            dynCO = cm_backend_simulate(p)[[1]][[1]];
             setDT(dynCO);
-            dynCO = melt(dynCO, id.vars = c("run", "t", "population", "group"), variable.name = "compartment", value.name = "value");
+            dynCO = melt(dynCO, id.vars = c("t", "population", "group"), variable.name = "compartment", value.name = "value");
 
             p = cm_translate_parameters(parameters(pop_regions[i], mat_regions[i], "cov", u_cov, R0_cov, fIa, 1, 0, dynCO, thousands[location == loc_names[i], popK] * 0.01));
-            dynCC = cm_backend_simulate(p);
+            dynCC = cm_backend_simulate(p)[[1]][[1]];
             setDT(dynCC);
-            dynCC = melt(dynCC, id.vars = c("run", "t", "population", "group"), variable.name = "compartment", value.name = "value");
+            dynCC = melt(dynCC, id.vars = c("t", "population", "group"), variable.name = "compartment", value.name = "value");
             gc()
             
             distrib = rbind(distrib,
@@ -247,7 +251,61 @@ results[, schools := factor(schools, levels = c("open", "closed"))]
 results[, location := factor(location, levels = c("Milan", "Birmingham", "Bulawayo"))]
 
 if (a_u < 0) {
-    cm_save(list(epi = results, dist = distrib, R0 = R0s), path("3-covflu-fix-R0.qs"))
+    cm_save(list(epi = results, dist = distrib, R0 = R0s), path("3-revised-covflu-fix-R0.qs"))
 } else if (a_R0 < 0) {
-    cm_save(list(epi = results, dist = distrib, R0 = R0s), path("3-covflu-fix-u.qs"))
+    cm_save(list(epi = results, dist = distrib, R0 = R0s), path("3-revised-covflu-fix-u.qs"))
 }
+
+
+
+
+
+
+# For calculating u to achieve desired R0 in Birmingham
+set.seed(1986)
+a_R0 = -1
+a_u = 1
+R0s = NULL
+nsamp = 100;
+for (fIa in c(0, 0.5, 1.0)) {
+    print(fIa);
+    covid_scenario = qread(path(paste0("2-linelist_both_fit_fIa", fIa, "-rbzvih.qs")));
+    variability = mean(unlist(covid_scenario[, lapply(.SD, function(x) sd(x)/mean(x)), .SDcols = u_00:u_70]));
+    
+    if (a_R0 < 0) {
+        if (fIa == 0) {
+            u_flu = 1.310;
+            u_cov = 0.1055;
+            R0_flu = -1;
+            R0_cov = -1;
+        } else if (fIa == 0.5) {
+            u_flu = 0.127;
+            u_cov = 0.0627;
+            R0_flu = -1;
+            R0_cov = -1;
+        } else {
+            u_flu = 0.0647;
+            u_cov = 0.0429;
+            R0_flu = -1;
+            R0_cov = -1;
+        }
+    } else {
+        u_flu = -1;
+        u_cov = -1;
+        R0_flu = 2.4;
+        R0_cov = 2.4;
+    }
+
+    for (i in 1) {
+        cat(pop_regions[i]);
+        for (j in 1:nsamp) {
+            cat(".");
+            p = cm_translate_parameters(parameters(pop_regions[i], mat_regions[i], "flu", u_flu, R0_flu, fIa, 1, 1));
+            R0s = rbind(R0s, data.table(virus = "flu", a_u = a_u, a_R0 = a_R0, fIa = fIa, location = loc_names[i], R0 = cm_calc_R0(p, 1)));
+            p = cm_translate_parameters(parameters(pop_regions[i], mat_regions[i], "cov", u_cov, R0_cov, fIa, 1, 1));
+            R0s = rbind(R0s, data.table(virus = "cov", a_u = a_u, a_R0 = a_R0, fIa = fIa, location = loc_names[i], R0 = cm_calc_R0(p, 1)));
+        }
+        cat("\n");
+    }
+}
+R0s[, mean(R0), by = .(virus, fIa)]

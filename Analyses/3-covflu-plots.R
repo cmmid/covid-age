@@ -26,6 +26,7 @@ c_colours = function(a = c("colour", "fill")) scale_colour_manual(values = ccols
 cm_path = "~/Dropbox/nCoV/covidm/";
 cm_force_rebuild = F;
 cm_verbose = F
+cm_version = 1
 if (Sys.info()["nodename"] %like% "lshtm") {
    cm_build_dir = paste0(cm_path, "build/lshtm");
 }
@@ -50,8 +51,8 @@ argv = commandArgs();
 argc = length(argv);
 a_which = argv[argc];
 
-covflu = cm_load(path(paste0("3-covflu-fix-", a_which, ".qs")))
-fwrite(covflu$R0[, mean(R0), keyby = .(location, virus, fIa)], paste0("~/Dropbox/nCoV/Analyses/3-covflu-", a_which, "-R0.csv"));
+covflu = cm_load(path(paste0("3-revised-covflu-fix-", a_which, ".qs")))
+fwrite(covflu$R0[, mean(R0), keyby = .(location, virus, fIa)], paste0("~/Dropbox/nCoV/Analyses/3-revised-covflu-", a_which, "-R0.csv"));
 
 #epi = results[, cm_mean_hdi(cases), by = .(t, virus, location, fIa, schools)]
 epi = covflu$epi[, cm_mean_hdi(cases), by = .(t, virus, location, fIa, schools, popK)]
@@ -123,35 +124,47 @@ epicol = function(covflu, epi, vir, Ia, titl) {
 }
 
 # a DIAGRAM
-covid_scenario = qread(path(paste0("2-linelist_symp_fit_fIa0.5.qs")));
-covid_scenario = colMeans(covid_scenario[, 5:12])
-covid_scenario = as.data.table(as.list(covid_scenario))
-covid_scenario = melt(covid_scenario, variable.name = "age", value.name = "Severity")
-covid_scenario[, age := as.numeric(str_sub(age, 3)) + 5]
-covid_scenario[, Susceptibility := 0.5]
-covid_scenario = rbind(covid_scenario, covid_scenario[8, .(age = 95, Severity, Susceptibility)])
-flu_scenario[, age := Age_gp * 5 - 2.5]
+covid_scenario = qread(path(paste0("2-linelist_both_fit_fIa0.5-rbzvih.qs")));
+covid_s = melt(covid_scenario[,5:20])[, cm_mean_hdi(value), by = variable]
+covid_s[, var := ifelse(variable %like% "^y", "Severity", "Susceptibility")]
+covid_s[, age := as.numeric(str_sub(variable, 3)) + 5]
+covid_s[, virus := "COVID-19"]
+covid_s = rbind(covid_s, covid_s[age == 75, .(mean, lower, upper, age = 95, var, virus)], fill = T)
+flu_s = flu_scenario[, .(age = Age_gp * 5 - 2.5, Severity, Susceptibility)]
+flu_s = melt(flu_s, id.vars = "age", variable.name = "var", value.name = "mean")
+flu_s[, virus := "Influenza-like"]
 
 scen = rbind(
-    covid_scenario[, .(age, Severity, Susceptibility, virus = "COVID")],
-    flu_scenario[, .(age, Severity, Susceptibility, virus = "Influenza-like")]
+    covid_s,
+    flu_s,
+    fill = T
 )
 
 f3a = ggplot(scen) +
-    geom_line(aes(x = age, y = Severity, group = 1, colour = "Severity")) +
-    geom_line(aes(x = age, y = Susceptibility, group = 2, colour = "Susceptibility")) +
+    #geom_ribbon(aes(x = age, ymin = lower, ymax = upper, group = var, fill = var), alpha = 0.25) +
+    geom_line(aes(x = age, y = mean, group = var, colour = var), size = 0.5) +
     facet_wrap(~virus, nrow = 1) +
-    labs(x = "Age", y = NULL, colour = NULL) + ylim(0,1) + xlim(0, 100) +
-    theme(legend.position = c(0.025, 0.88), strip.background = element_blank()) + txt_theme
+    labs(x = "Age", y = NULL, colour = NULL, fill = NULL) + ylim(0,1) + xlim(0, 100) +
+    theme(legend.position = c(0.2, 0.25), strip.background = element_blank()) + txt_theme
 
-ggsave(path(paste0("../Submission/Fig3a-", a_which, ".pdf")), f3a, width = 7, height = 3, units = "cm", useDingbats = F)
-
+ggsave(path(paste0("../Submission/Fig3a-revised-", a_which, ".pdf")), f3a, width = 7, height = 3, units = "cm", useDingbats = F)
 
 # b POP PYRAMIDS
 f3b = popdist(cm_populations, c("Italy | Milan", "UK | Birmingham", "Zimbabwe | Bulawayo"))
-ggsave(path(paste0("../Submission/Fig3b-", a_which, ".pdf")), f3b, width = 7, height = 3.5, units = "cm", useDingbats = F)
+ggsave(path(paste0("../Submission/Fig3b-revised-", a_which, ".pdf")), f3b, width = 7, height = 3.5, units = "cm", useDingbats = F)
 
 # c ATTACK RATE BY AGE
+redo_age = function(x, col = "age")
+{
+    ages = as.numeric(str_split(x[[col]], " |-|\\+", simplify = T)[,1]);
+    ages_lower = unique(ages);
+    ages_upper = c(paste0("-", tail(ages_lower, -1) - 1), "+")
+    age_ids = match(ages, ages_lower);
+    x[, (col) := paste0(..ages_lower[..age_ids], ..ages_upper[..age_ids])];
+    x[, (col) := factor(get(col), levels = unique(get(col)))];
+    return (x)
+}
+
 popgs = NULL;
 for (nm in c("Italy | Milan", "UK | Birmingham", "Zimbabwe | Bulawayo")) {
     popcat = cm_populations[name == nm]
@@ -170,6 +183,10 @@ dist = merge(dist, popgs, by = c("location", "age"))
 dist[, location := factor(location, levels = c("Milan", "Birmingham", "Bulawayo"))]
 
 dist2 = dist[, cm_mean_hdi(cases/popK), by = .(age, virus, location, fIa, schools)];
+dist2 = redo_age(dist2)
+
+dist2[schools == "open", sum(mean), by = .(location, virus, fIa)][fIa == 0.5, mean(V1), by = virus]
+dist2[schools == "open", sum(mean), by = .(location, virus, fIa, group = ifelse(age %in% c("0-9", "10-19"), "under20", "over20"))][fIa == 0.5, sum(V1), by = .(virus, group)]
 
 f3c1 = ggplot(dist2[fIa == 0.5 & schools == "open"]) + 
     geom_col(aes(age, mean, fill = location)) +
@@ -181,14 +198,14 @@ f3c1 = ggplot(dist2[fIa == 0.5 & schools == "open"]) +
         strip.background = element_blank(), strip.text = element_blank())
 
 f3c = ggdraw(f3c1) + 
-    draw_text("COVID", 0.18, 0.95, size = 7, hjust = 0) +
-    draw_text("Influenza-like", 0.18, 0.57, size = 7, hjust = 0)
+    draw_text("COVID-19", 0.16, 0.97, size = 6, hjust = 0) +
+    draw_text("Influenza-like", 0.16, 0.57, size = 6, hjust = 0)
 
-ggsave(path(paste0("../Submission/Fig3c-", a_which, ".pdf")), f3c, width = 7, height = 5, units = "cm", useDingbats = F)
+ggsave(path(paste0("../Submission/Fig3c-revised-", a_which, ".pdf")), f3c, width = 7, height = 5, units = "cm", useDingbats = F)
 
 
 # d EPIDEMICS
-# plot_grid(epicol(covflu, epi, "cov", 0.5, "COVID"), 
+# plot_grid(epicol(covflu, epi, "cov", 0.5, "COVID-19"), 
 #           epicol(covflu, epi, "flu", 0.5, "Influenza-like"), nrow = 1)
 # 
 
@@ -207,26 +224,32 @@ epicol2 = function(epi, vir, Ia, titl, yl, lp = "none") {
         scale_x_continuous(breaks = c(0, 100, 200))
 }
 
-f3d = plot_grid(epicol2(epi, "cov", c(0.0, 0.25, 0.5, 0.75), "COVID", "Clinical cases\nper 1000 population", c(0.8, 0.92)),
-    epicol2(epi, "flu", c(0.0, 0.25, 0.5, 0.75), "Influenza-like", NULL), nrow = 1)
+f3d = plot_grid(epicol2(epi, "cov", c(0.0, 0.5, 1.0), "COVID-19", "Clinical cases\nper 1000 population", c(0.8, 0.92)),
+    epicol2(epi, "flu", c(0.0, 0.5, 1.0), "Influenza-like", NULL), nrow = 1)
 
-ggsave(path(paste0("../Submission/Fig3d-", a_which, ".pdf")), f3d, width = 10, height = 5, units = "cm", useDingbats = F)
+ggsave(path(paste0("../Submission/Fig3d-revised-", a_which, ".pdf")), f3d, width = 10, height = 5, units = "cm", useDingbats = F)
 
 
 # e IMPACT OF SCHOOL CLOSURES
 stats = covflu$epi[, .(peak_time = t[which.max(cases)], peak_cases = max(cases), total_cases = sum(cases)), 
                    by = .(run, virus, location, fIa, schools, popK)]
 
-stats2 = stats[, .(peak_time = median(peak_time), peak_cases = median(peak_cases), total_cases = median(total_cases)), 
+stats2 = stats[, .(peak_time = mean(peak_time), peak_cases = median(peak_cases), total_cases = median(total_cases)), 
     by = .(virus, location, fIa, schools, popK)]
 stats2 = cbind(stats2[schools == "open"], stats2[schools == "closed"])
 names(stats2)[9:16] = paste0("cl", names(stats2)[9:16])
 
 stats[, peak_time := peak_time + rnorm(.N, 0, 0.25)]
 stats[virus == "flu", virus := "Influenza-like"]
-stats[virus == "cov", virus := "COVID"]
+stats[virus == "cov", virus := "COVID-19"]
 stats2[virus == "flu", virus := "Influenza-like"]
-stats2[virus == "cov", virus := "COVID"]
+stats2[virus == "cov", virus := "COVID-19"]
+
+# numbers for text
+stats2[fIa == 0.5, mean(total_cases/popK), by = .(virus)]
+stats2[, mean(100-100*clpeak_cases/peak_cases), by = .(location, virus)]
+stats2[, mean(clpeak_time - peak_time), by = .(location, virus)]
+stats2[virus == "COVID-19", mean(100-100*clpeak_cases/peak_cases), by = .(fIa, location, virus)]
 
 f3e = ggplot(stats[fIa == 0.5], aes(peak_time, peak_cases / popK)) +
     geom_segment(data = stats2[fIa == 0.5],
@@ -236,12 +259,12 @@ f3e = ggplot(stats[fIa == 0.5], aes(peak_time, peak_cases / popK)) +
     labs(x = "Time to peak (days)", y = "Peak incidence\nper 1000 population") +
     ylim(0, NA) +
     c_colours() + guides(colour = FALSE) +
-    theme(legend.position = c(0.68, 0.7)) +
+    theme(legend.position = c(0.8, 0.9)) +
     facet_wrap(~virus, scales = "free_y", nrow = 2) +
     theme(strip.background = element_blank(), legend.text = element_text(size = 6), legend.title = element_text(size = 6), 
             legend.spacing.y = unit(0.05, "cm"), legend.key.height = unit(0.2, "cm")) + txt_theme
 
-ggsave(path(paste0("../Submission/Fig3e-", a_which, ".pdf")), f3e, width = 10, height = 6, units = "cm", useDingbats = F)
+ggsave(path(paste0("../Submission/Fig3e-revised-", a_which, ".pdf")), f3e, width = 10, height = 6, units = "cm", useDingbats = F)
 
 # # total cases version
 # f3d = ggplot(stats[fIa == 0.5], aes(peak_time, total_cases / popK)) +
@@ -260,35 +283,35 @@ ggsave(path(paste0("../Submission/Fig3e-", a_which, ".pdf")), f3e, width = 10, h
 stats = covflu$epi[, .(peak_time = t[which.max(cases)], peak_cases = max(cases), total_cases = sum(cases)), 
                    by = .(run, virus, location, fIa, schools, popK)]
 stats[virus == "flu", virus := "Influenza-like"]
-stats[virus == "cov", virus := "COVID"]
+stats[virus == "cov", virus := "COVID-19"]
 
-stats2 = stats[, .(peak_time = median(peak_time), peak_cases = median(peak_cases), total_cases = median(total_cases)), 
+stats2 = stats[, .(peak_time = mean(peak_time), peak_cases = median(peak_cases), total_cases = median(total_cases)), 
     by = .(virus, location, fIa, schools, popK)]
 stats3 = cbind(stats2[schools == "open"], stats2[schools == "closed"])
 names(stats3)[9:16] = paste0("cl", names(stats3)[9:16])
 
-dnudge = stats3[virus == "COVID", max(peak_cases / popK)] / 10
+dnudge = stats3[virus == "COVID-19", max(peak_cases / popK)] / 10
 if (a_which == "R0") {
-    dnudge = dnudge * 0.6
+    dnudge = dnudge * 0.4
 }
 
 f3f = ggplot() +
-    geom_segment(data = stats3[virus == "COVID"],
+    geom_segment(data = stats3[virus == "COVID-19"],
         aes(x = peak_time, y = peak_cases / popK, xend = clpeak_time, yend = clpeak_cases / clpopK), colour = "black", size = 0.125, linetype = "93") +
-    geom_text(data = stats3[virus == "COVID" & fIa < 0.6],
-        aes(x = (peak_time + clpeak_time)/2, y = (peak_cases / popK + clpeak_cases / clpopK) / 2, label = fIa), size = 1.5, colour = "black", nudge_x = 0.8*dnudge, nudge_y = dnudge/4, hjust = 0) +
-    geom_text(data = stats3[virus == "COVID" & fIa > 0.6],
-        aes(x = (peak_time + clpeak_time)/2, y = (peak_cases / popK + clpeak_cases / clpopK) / 2, label = fIa), size = 1.5, colour = "black", nudge_x = -0.8*dnudge, nudge_y = -dnudge/4, hjust = 1) +
-    geom_point(data = stats2[virus == "COVID"], 
+    geom_text(data = stats3[virus == "COVID-19" & location == "Bulawayo"],
+        aes(x = peak_time, y = peak_cases / popK - 0.5 * (fIa - 0.375), label = fIa), size = 1.5, colour = "black", nudge_x = -dnudge, hjust = 0.5) +
+    geom_text(data = stats3[virus == "COVID-19" & location != "Bulawayo"],
+        aes(x = peak_time, y = peak_cases / popK, label = fIa), size = 1.5, colour = "black", nudge_x = -dnudge, hjust = 0.5) +
+    geom_point(data = stats2[virus == "COVID-19"], 
         aes(x = peak_time, y = peak_cases / popK, colour = location, shape = schools), size = 1.5, alpha = 0.75) +
     labs(x = "Time to peak (days)", y = "Peak incidence\nper 1000 population") +
     facet_wrap(~virus, scales = "free_y", nrow = 2) +
     theme(strip.background = element_blank()) + txt_theme + guides(colour = FALSE) +
     c_colours() +
-    theme(legend.position = c(0.68, 0.7), strip.background = element_blank(), legend.text = element_text(size = 6), legend.title = element_text(size = 6), 
+    theme(legend.position = c(0.8, 0.9), strip.background = element_blank(), legend.text = element_text(size = 6), legend.title = element_text(size = 6), 
             legend.spacing.y = unit(0.05, "cm"), legend.key.height = unit(0.2, "cm"))
 
-ggsave(path(paste0("../Submission/Fig3f-", a_which, ".pdf")), f3f, width = 5, height = 6.5, units = "cm", useDingbats = F)
+ggsave(path(paste0("../Submission/Fig3f-revised-", a_which, ".pdf")), f3f, width = 5, height = 6.5, units = "cm", useDingbats = F)
 
 
 f3 = plot_grid(
@@ -297,5 +320,25 @@ f3 = plot_grid(
         plot_grid(f3e, f3f, nrow = 1, labels = c("e", "f"), label_size = 9),
         rel_heights = c(5, 4), ncol = 1, labels = c("d", "", ""), label_size = 9),
     nrow = 1, rel_widths = c(7, 13))
-ggsave(path(paste0("../Submission/Fig3-", a_which, ".pdf")), f3, width = 20, height = 10, units = "cm", useDingbats = F)
+ggsave(path(paste0("../Submission/Fig3-revised-", a_which, ".pdf")), f3, width = 20, height = 10, units = "cm", useDingbats = F)
+
+
+
+
+# proportion of contacts school among 0-14yos in 3 cities
+cities = c("Italy | Milan", "UK | Birmingham", "Zimbabwe | Bulawayo")
+
+for (cit in cities) {
+    pop = cm_populations[name == cit & age %in% c("0-4", "5-9", "10-14"), f + m, by = age]$V1
+    m = cm_matrices[[cit]]
+    h = weighted.mean(rowSums(m$home)[1:3], pop)   / weighted.mean(rowSums(m$home + m$work + m$school + m$other)[1:3], pop)
+    w = weighted.mean(rowSums(m$work)[1:3], pop)   / weighted.mean(rowSums(m$home + m$work + m$school + m$other)[1:3], pop)
+    s = weighted.mean(rowSums(m$school)[1:3], pop) / weighted.mean(rowSums(m$home + m$work + m$school + m$other)[1:3], pop)
+    o = weighted.mean(rowSums(m$other)[1:3], pop)  / weighted.mean(rowSums(m$home + m$work + m$school + m$other)[1:3], pop)
+    print(cit)
+    print(h)
+    print(w)
+    print(s)
+    print(o)
+}
 

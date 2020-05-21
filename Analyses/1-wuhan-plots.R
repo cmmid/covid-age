@@ -18,8 +18,9 @@ library(magick)
 path = function(x, prefix = "~/Dropbox/nCoV/Analyses/") { paste0(prefix, x); }
 
 # covidm options
-cm_path = "~/Dropbox/nCoV/covidm/";
+cm_path = "~/Documents/ncov_age/covidm/";
 cm_force_rebuild = F;
+cm_version = 1;
 source(path("R/covidm.R", cm_path))
 
 age_dist_wuhan = fread("~/Dropbox/nCoV/wuhan_dist_70.csv");
@@ -74,20 +75,20 @@ calc_R0_sub = function(p, contact, susc_frac = 1) {
     abs(eigen(ngm)$values[1])
 }
 
-calc_R0 = function(fit, n_samples) {
+calc_R0 = function(fit, n_samples, population = 1) {
     s = sample.int(nrow(fit$posterior), n_samples);
     R0 = NULL;
     for (r in s) {
         # Get parameters
         x = unlist(fit$posterior[r,]);
         p = cm_translate_parameters(fit$parameters_func(fit$base_parameters, x));
-        m = p$pop[[1]]$matrices;
+        m = p$pop[[population]]$matrices;
         
         summat = function(m, con) { m[[1]] * con[[1]] + m[[2]] * con[[2]] + m[[3]] * con[[3]] + m[[4]] * con[[4]] }
 
-        R0 = rbind(R0, data.table(t = 0, R0 = calc_R0_sub(p, summat(m, p$pop[[1]]$contact))));
+        R0 = rbind(R0, data.table(t = 0, R0 = calc_R0_sub(p, summat(m, p$pop[[population]]$contact))));
         for (i in 1:length(p$pop[[1]]$schedule)) {
-            R0 = rbind(R0, data.table(t = p$pop[[1]]$schedule[[i]]$t, R0 = calc_R0_sub(p, summat(m, p$pop[[1]]$schedule[[i]]$contact))));
+            R0 = rbind(R0, data.table(t = p$pop[[population]]$schedule[[i]]$t, R0 = calc_R0_sub(p, summat(m, p$pop[[population]]$schedule[[i]]$contact))));
         }
     }
     
@@ -112,7 +113,7 @@ show_R0 = function(R0, seed_date, time_start = "2019-11-01") {
         geom_vline(data = R0[t0 > 0], aes(xintercept = t0 + ymd(time_start)), linetype = "33", colour = "grey", size = 0.25) +
         geom_text(data = R0labs, aes(x = t, y = y, label = value, colour = scenario), size = 1, hjust = 0.5, vjust = 0) +
         labs(x = "Date", y = NULL, title = expression(R[0])) +
-        facet_wrap(~paste0("H[", scenario, "]"), strip.position = "left", ncol = 1, labeller = label_parsed) +
+        facet_wrap(~paste0("M", scenario), strip.position = "left", ncol = 1, labeller = label_parsed) +
         sc_colours() +
         theme(legend.position = "none", strip.placement = "outside", 
             strip.background = element_blank(), strip.text.y.left = element_text(angle = 0))
@@ -146,7 +147,7 @@ add_coss = function(p, max_age, colour, x0, y0, x1, y1, x2, y2, lt = "solid")
     y2 = rep_len(y2, len);
     
     n_samples = 1000;
-    ages = c(0, seq(2.5, max_age - 2.5, by = 5), max_age);
+    ages = c(0, seq(0, max_age, by = 1), max_age);
     rows = sample.int(length(x0), n_samples, replace = T);
     mat = matrix(0, nrow = n_samples, ncol = length(ages));
 
@@ -159,7 +160,7 @@ add_coss = function(p, max_age, colour, x0, y0, x1, y1, x2, y2, lt = "solid")
     }
     
     d = data.table(i = 1:length(ages), age = ages);
-    d = d[, c(as.list(hdi(mat[, i], 0.95)), as.list(hdi(mat[, i], 0.5)), mean = mean(mat[, i]), age = age), by = i];
+    d = d[, c(as.list(quantile(mat[, i], c(0.025, 0.975))), as.list(quantile(mat[, i], c(0.25, 0.75))), mean = mean(mat[, i]), age = age), by = i];
     
     names(d) = c("i", "lo95", "hi95", "lo50", "hi50", "mean", "age");
     
@@ -180,8 +181,11 @@ calc_DIC = function(z, setter, likelihood)
 
 redo_age = function(x, col = "age")
 {
-    x[, (col) := as.character(get(col))];
-    x[, (col) := str_replace_all(get(col), " ", "")];
+    ages = as.numeric(str_split(x[[col]], " |-|\\+", simplify = T)[,1]);
+    ages_lower = unique(ages);
+    ages_upper = c(paste0("-", tail(ages_lower, -1) - 1), "+")
+    age_ids = match(ages, ages_lower);
+    x[, (col) := paste0(..ages_lower[..age_ids], ..ages_upper[..age_ids])];
     x[, (col) := factor(get(col), levels = unique(get(col)))];
     return (x)
 }
@@ -193,7 +197,7 @@ sp_comparison4 = function(results, time_start = "2019-12-01", time_end = "2040-0
     incHDI[, date := ymd(time_start) + t];
     incHDI[, scenario := factor(scenario, levels = unique(scenario))];
     
-    plEpiMain = ggplot(incHDI[date <= ymd(time_end)]) +
+    plEpiMain = ggplot(incHDI[date >= "2019-12-01" & date <= ymd(time_end)]) +
         geom_ribbon(aes(x = date, ymin = lower, ymax = upper, fill = scenario, group = scenario), alpha = 0.25) +
         geom_line(aes(x = date, y = mean, colour = scenario, group = scenario)) +
         geom_point(data = cases_wuhan1, aes(x = date, y = pmax(0.1, incidence)), size = 0.25) +
@@ -205,7 +209,7 @@ sp_comparison4 = function(results, time_start = "2019-12-01", time_end = "2040-0
     incHDI[, lower := pmax(0.1, lower)]
     incHDI[, mean := pmax(0.1, mean)]
     incHDI[, upper := pmax(0.1, upper)]
-    plEpiInset = ggplot(incHDI[date <= ymd(time_end)]) +
+    plEpiInset = ggplot(incHDI[date >= "2019-12-01" & date <= "2020-01-31"]) +
         geom_ribbon(aes(x = date, ymin = lower, ymax = upper, fill = scenario, group = scenario), alpha = 0.25) +
         geom_line(aes(x = date, y = mean, colour = scenario, group = scenario)) +
         geom_point(data = cases_wuhan1, aes(x = date, y = pmax(0.1, incidence)), size = 0.25) +
@@ -214,7 +218,7 @@ sp_comparison4 = function(results, time_start = "2019-12-01", time_end = "2040-0
         scale_y_log10(breaks = c(0.1, 1, 10, 100, 1000), labels = c("0", "1", "10", "100", "1000")) +
         labs(x = NULL, y = NULL) + theme(legend.position = "none")
     
-    plEpi = ggdraw(plEpiMain) + draw_plot(plEpiInset, .1, .2, .6, .7)
+    plEpi = ggdraw(plEpiMain) + draw_plot(plEpiInset, .1, .2, .4, .7)
     
     # show age dist from Li paper
     model_dist = results[, cm_case_distribution(.SD, time_start, "2019-12-08", c("2019-12-31", "2020-01-11", "2020-01-22"), c(0, 15, 45, 65, 100), "cases_reported"), by = .(run, scenario)];
@@ -298,19 +302,6 @@ sp_comparison4 = function(results, time_start = "2019-12-01", time_end = "2040-0
     plot_grid(plEpi, plot_grid(plDist, plDist2, nrow = 1, rel_widths = c(3, 2)), plDistS, labels = c("f", "g", "h"), label_size = 10, label_x = -0.025, nrow = 3, ncol = 1, rel_heights = c(2, 2, 2))
 }
 
-tiny_dist = function(d, title, col, tmax) {
-    dd = data.table(y = d / max(d));
-    dd[, t := (seq_along(d) - 1) * 0.25]
-    mean = dd[, weighted.mean(t, y)]
-    ggplot(dd) + 
-        geom_ribbon(aes(x = t, ymin = 0, ymax = y), fill = col, colour = "black", size = 0.125) +
-        annotate(geom = "text", x = tmax*2/3, y = 0.75, label = paste(round(mean, 1), "days"), size = 2) +
-        labs(x = NULL, y = title) +
-        coord_cartesian(xlim = c(0, tmax), expand = F) +
-        theme(axis.title.y = element_text(angle = 0, hjust = 0, vjust = 0.5)) +
-        scale_y_continuous(breaks = c(0, 1))
-}
-
 add_distr = function(d1, d2) {
     d = rep(0, length(d1));
     for (i1 in 1:length(d1)) {
@@ -337,11 +328,12 @@ show_posterior = function(fit)
     ggplot(d) + geom_density(aes(value, fill = variable)) + facet_wrap(~variable, scales = "free") + theme(legend.position = "none")
 }
 
-Col1 = "#ac2f2f";#"#b92d57";
-Col2 = "#fb751e";#"#ffcc00";
-Col3 = "#8ac3ff";#"#00b7ff";
-sc_colours = function(a = c("colour", "fill")) scale_colour_manual(values = c("observed" = NA, "1" = Col1, "2" = Col2, "3" = Col3), aesthetics = a);
-sc_outline_colours = function() scale_colour_manual(values = c("observed" = "#000000", "1" = Col1, "2" = Col2, "3" = Col3))
+Col1 = "#fb751e";
+Col2 = "#8ac3ff";
+Col3 = "#ac2f2f";
+Col4 = "#eea6ee";
+sc_colours = function(a = c("colour", "fill")) scale_colour_manual(values = c("observed" = NA, "1" = Col1, "2" = Col2, "3" = Col3, "4" = Col4), aesthetics = a);
+sc_outline_colours = function() scale_colour_manual(values = c("observed" = "#000000", "1" = Col1, "2" = Col2, "3" = Col3, "4" = Col4))
 txt_theme = theme(plot.title = element_text(face = "plain", size = 7, hjust = 0.5))
 
 ###############
@@ -357,27 +349,28 @@ theme_set(theme_cowplot(font_size = 7, font_family = "Helvetica", line_size = 0.
 
 # FIG. 1 MODEL AND FITTING TO WUHAN
 
-fig1 = function(fit_same, fit_susc, fit_symp, fileout, scf = 0.5)
+fig1 = function(fit_susc, fit_symp, fit_same, fileout, scf = 0.5)
 {
-    z_same = fit_same$posterior
     z_susc = fit_susc$posterior
     z_symp = fit_symp$posterior
+    z_same = fit_same$posterior
     
     ppsusc = ggplot()
+
     ppsusc = add_coss(ppsusc, 90, Col1,
-                    15, z_same$susc,
-                    45, z_same$susc,
-                    75, z_same$susc)
-    ppsusc = add_coss(ppsusc, 90, Col2,
                     z_susc$age_y, z_susc$susc_y,
                     z_susc$age_m, z_susc$susc_m,
                     z_susc$age_o, z_susc$susc_o)
-    ppsusc = add_coss(ppsusc, 90, Col3,
+    ppsusc = add_coss(ppsusc, 90, Col2,
                     15, z_symp$susc,
                     45, z_symp$susc,
                     75, z_symp$susc)
+    ppsusc = add_coss(ppsusc, 90, Col3,
+                    15, z_same$susc,
+                    45, z_same$susc,
+                    75, z_same$susc)
     ppsusc = ppsusc + 
-        ylim(0, 0.16) +
+        ylim(0, 0.1) +
         labs(x = "Age", y = NULL, title = "Susceptibility") +
         txt_theme
     
@@ -387,25 +380,25 @@ fig1 = function(fit_same, fit_susc, fit_symp, fileout, scf = 0.5)
                     45, scf,
                     75, scf)
     ppsymp = add_coss(ppsymp, 90, Col2,
+                    z_symp$age_y, z_symp$symp_y,
+                    z_symp$age_m, z_symp$symp_m,
+                    z_symp$age_o, z_symp$symp_o)
+    ppsymp = add_coss(ppsymp, 90, Col3,
                     15, scf,
                     45, scf,
                     75, scf, "dashed")
-    ppsymp = add_coss(ppsymp, 90, Col3,
-                    z_symp$age_y, z_symp$symp_y,
-                    z_symp$age_m, scf,
-                    z_symp$age_o, z_symp$symp_o)
     ppsymp = ppsymp + 
         ylim(0, 1) +
         labs(x = "Age", y = NULL, title = "Clinical fraction") +
         txt_theme
     
     contact = rbind(
-        data.table(scenario = "1", what = "q[H]", q = z_same$qH),
-        data.table(scenario = "1", what = "q[L]", q = z_same$qL),
-        data.table(scenario = "2", what = "q[H]", q = z_susc$qH),
-        data.table(scenario = "2", what = "q[L]", q = z_susc$qL),
-        data.table(scenario = "3", what = "q[H]", q = z_symp$qH),
-        data.table(scenario = "3", what = "q[L]", q = z_symp$qL)
+        data.table(scenario = "1", what = "q[H]", q = z_susc$qH),
+        data.table(scenario = "1", what = "q[L]", q = z_susc$qL),
+        data.table(scenario = "2", what = "q[H]", q = z_symp$qH),
+        data.table(scenario = "2", what = "q[L]", q = z_symp$qL),
+        data.table(scenario = "3", what = "q[H]", q = z_same$qH),
+        data.table(scenario = "3", what = "q[L]", q = z_same$qL)
     )
     
     contact[, what := factor(what, levels = c("q[H]", "q[L]"))]
@@ -413,7 +406,7 @@ fig1 = function(fit_same, fit_susc, fit_symp, fileout, scf = 0.5)
     ppcontact = ggplot(contact) +
         stat_ydensity(aes(what, q, fill = scenario), geom = "violin", colour = NA, kernel = "epanechnikov") +
         scale_x_discrete(NULL, limits = rev(levels(contact$what)), breaks = c("q[H]", "q[L]"), labels = parse(text = c("q[H]", "q[L]"))) +
-        facet_wrap(~paste0("H[", scenario, "]"), strip.position = "left", ncol = 1, labeller = label_parsed) +
+        facet_wrap(~paste0("M", scenario), strip.position = "left", ncol = 1, labeller = label_parsed) +
         sc_colours() +
         coord_flip() +
         labs(x = NULL, y = "Non-school contacts", title = "Contact multipliers") +
@@ -424,15 +417,15 @@ fig1 = function(fit_same, fit_susc, fit_symp, fileout, scf = 0.5)
     cat("Non-R0 done.\n")
     
     seed_date = rbind(
-        data.table(scenario = "1", d = ymd(fit_same$base_parameters$date0) + fit_same$posterior$seed_start),
-        data.table(scenario = "2", d = ymd(fit_susc$base_parameters$date0) + fit_susc$posterior$seed_start),
-        data.table(scenario = "3", d = ymd(fit_symp$base_parameters$date0) + fit_symp$posterior$seed_start)
+        data.table(scenario = "1", d = ymd(fit_susc$base_parameters$date0) + fit_susc$posterior$seed_start),
+        data.table(scenario = "2", d = ymd(fit_symp$base_parameters$date0) + fit_symp$posterior$seed_start),
+        data.table(scenario = "3", d = ymd(fit_same$base_parameters$date0) + fit_same$posterior$seed_start)
     );
     
     r0 = rbind(
-        cbind(scenario = "1", calc_R0(fit_same, 100)),
-        cbind(scenario = "2", calc_R0(fit_susc, 100)),
-        cbind(scenario = "3", calc_R0(fit_symp, 100))
+        cbind(scenario = "1", calc_R0(fit_susc, 100)),
+        cbind(scenario = "2", calc_R0(fit_symp, 100)),
+        cbind(scenario = "3", calc_R0(fit_same, 100))
     )
 
     ppR0 = show_R0(r0, seed_date, time_start = fit_same$base_parameters$date0) + 
@@ -445,15 +438,15 @@ fig1 = function(fit_same, fit_susc, fit_symp, fileout, scf = 0.5)
     cat("Params done.\n")
     
     z = rbind(
-        cbind(cm_sample_fit(fit_same, 50), scenario = 1),
-        cbind(cm_sample_fit(fit_susc, 50), scenario = 2),
-        cbind(cm_sample_fit(fit_symp, 50), scenario = 3)
+        cbind(cm_sample_fit(fit_susc, 50), scenario = 1),
+        cbind(cm_sample_fit(fit_symp, 50), scenario = 2),
+        cbind(cm_sample_fit(fit_same, 50), scenario = 3)
     )
     
     pd = sp_comparison4(z, time_start = "2019-11-01", time_end = "2020-02-01")
     
-    diagram = ggdraw() +
-        draw_image(path("../model_diagram_small.png"));
+    diagram = plot_grid(ggdraw() + draw_image(path("../model_diagram_small.png")),
+        tinydists(fit_same), ggdraw(), ncol = 3, rel_widths = c(4, 1, 0.25))
     
     p1 = plot_grid(plot_grid(diagram, pp, nrow = 2, rel_heights = c(2, 4), labels = c("a", ""), label_size = 10), pd, nrow = 1, rel_widths = c(2, 3))
 
@@ -463,40 +456,53 @@ fig1 = function(fit_same, fit_susc, fit_symp, fileout, scf = 0.5)
     ggsave(path(paste0(fileout, ".png")), p1, width = 20, height = 10, units = "cm")
 }
 
+tiny_dist = function(ds, titles, tmax) {
+    plots = list()
+    for (i in seq_along(ds)) {
+        dd = data.table(y = ds[[i]] / max(ds[[i]]));
+        dd[, t := (seq_along(ds[[i]]) - 1) * 0.25];
+        mean = dd[, weighted.mean(t, y)];
+        plots[[i]] = ggplot(dd) + 
+            geom_ribbon(aes(x = t, ymin = 0, ymax = y), fill = "#ffffff", colour = "black", size = 0.25) +
+            annotate(geom = "text", x = tmax, y = 0.75, hjust = 1, label = round(mean, 1), size = 2) +
+            labs(x = NULL, y = titles[[i]]) + 
+            coord_cartesian(xlim = c(0, tmax), ylim = c(0, 1.02), expand = F) +
+            theme(axis.title.y = element_text(angle = 0, hjust = 0, vjust = 0.5), plot.margin = unit(c(0.1,0,0.0,0), "cm"),
+                axis.text.y = element_blank(), axis.ticks.y = element_blank()) +
+            scale_y_continuous(breaks = c(0, 1))
+        if (i < length(ds)) {
+            plots[[i]] = plots[[i]] + theme(axis.text.x = element_blank())
+        }
+        if (i == length(ds)) {
+            plots[[i]] = plots[[i]] + labs(x = "Duration (days)")
+        }
+    }
+    plot_grid(plotlist = plots, ncol = 1, rel_heights = c(1, 1, 1, 1, 1, 2.1), align = "v")
+}
+
 tinydists = function(fit_same)
 {
     pop1 = fit_same$base_parameters$pop[[1]];
-
-    schematic = 
-        plot_grid(
-            plot_grid(
-                diagram, 
-                plot_grid(
-                    tiny_dist(add_distr(pop1$dE, pop1$dIp), expression(P[I]), "#eeeeff", 21),
-                    tiny_dist(add_distr(pop1$dE, halve_distr(0.5 * add_distr(pop1$dIp, pop1$dIs) + 0.5 * pop1$dIa)), expression(P[S]), "#ffeeff", 21), 
-                ncol = 1),
-            ncol = 2, rel_widths = c(3, 1)),
-            plot_grid(
-                tiny_dist(pop1$dE, expression(d[E]), "#ffeeee", 21),
-                tiny_dist(pop1$dIp, expression(d[P]), "#ffffee", 21),
-                tiny_dist(pop1$dIs, expression(d[C]), "#eeffee", 21),
-                tiny_dist(pop1$dIa, expression(d[S]), "#eeffff", 21), ncol = 4),
-            ncol = 1, rel_heights = c(2, 1)
-        )
+    tiny_dist(list(pop1$dE, pop1$dIp, pop1$dIs, pop1$dIa, add_distr(pop1$dE, pop1$dIp), 
+        add_distr(pop1$dE, halve_distr(0.5 * add_distr(pop1$dIp, pop1$dIs) + 0.5 * pop1$dIa))),
+        list(expression(d[E]), expression(d[P]), expression(d[C]), expression(d[S]), expression(P[I]), expression(P[S])), 12)
 }
 
 
 ### PLOTTING
 
-fit_same = cm_load(path("1-wuhan-fit-same-fIa-0.5.qs"))
-fit_susc = cm_load(path("1-wuhan-fit-susc-fIa-0.5.qs"))
-fit_symp = cm_load(path("1-wuhan-fit-symp-fIa-0.5.qs"))
+fit_susc = cm_load(path("1-wuhan-fit-susc-rho-0.1-fIa-0.5.qs"))
+fit_symp = cm_load(path("1-wuhan-fit-symp-rho-0.1-fIa-0.5.qs"))
+fit_same = cm_load(path("1-wuhan-fit-same-rho-0.1-fIa-0.5.qs"))
+fit_both = cm_load(path("1-wuhan-fit-both-rho-0.1-fIa-0.5.qs"))
 
-fig1(fit_same, fit_susc, fit_symp, "../Submission/Fig1-test", 0.5);
+fig1(fit_susc, fit_symp, fit_same, "../Submission/Fig1", 0.5);
+fig1alt(fit_susc, fit_symp, fit_both, "../Submission/Fig1alt", 0.5);
 
 cm_DIC(fit_same)
 cm_DIC(fit_susc)
 cm_DIC(fit_symp)
+cm_DIC(fit_both)
 
 melt(fit_same$posterior, measure.vars = 5:ncol(fit_same$posterior))[, cm_mean_hdi(value), by = variable][
     , paste0(signif(mean,2), " (", signif(lower, 2), "-", signif(upper, 2), ")"), by = variable]
@@ -508,14 +514,11 @@ melt(fit_symp$posterior, measure.vars = 5:ncol(fit_symp$posterior))[, cm_mean_hd
     , paste0(signif(mean,2), " (", signif(lower, 2), "-", signif(upper, 2), ")"), by = variable]
 
 
-p = cm_plot_posterior(fit_same)
-ggsave(path("../Submission/S1-wuhan-posterior-same.pdf"), p, width = 10, height = 10, units = "cm", useDingbats = F)
-p = cm_plot_posterior(fit_susc)
-ggsave(path("../Submission/S1-wuhan-posterior-susc.pdf"), p, width = 10, height = 10, units = "cm", useDingbats = F)
-p = cm_plot_posterior(fit_symp)
-ggsave(path("../Submission/S1-wuhan-posterior-symp.pdf"), p, width = 10, height = 10, units = "cm", useDingbats = F)
-
-
+p1 = cm_plot_posterior(fit_susc)
+p2 = cm_plot_posterior(fit_symp)
+p3 = cm_plot_posterior(fit_same) + facet_wrap(~parameter, scales = "free", ncol = 4)
+p = plot_grid(p1, p2, p3, ncol = 1, labels = c("a", "b", "c"), label_size = 8, rel_heights = c(2, 2, 1.2))
+ggsave(path("../Submission/S1-wuhan-posteriors.pdf"), p, width = 12, height = 15, units = "cm", useDingbats = F)
 
 
 # POSTERIORS
@@ -539,3 +542,123 @@ cm_plot_posterior(cm_load(path("1-wuhan-fit-susc-fIa-0.75.qs")))
 ggsave("~/Dropbox/nCoV/Submission/Supp Figs/posterior-susc-0.75.pdf", width = 12, height = 8, units = "cm", useDingbats = F)
 cm_plot_posterior(cm_load(path("1-wuhan-fit-symp-fIa-0.75.qs")))
 ggsave("~/Dropbox/nCoV/Submission/Supp Figs/posterior-symp-0.75.pdf", width = 12, height = 8, units = "cm", useDingbats = F)
+
+
+
+
+# Hypotheses 1, 2, 4
+fig1alt = function(fit_susc, fit_symp, fit_both, fileout, scf = 0.5)
+{
+    Col1 <<- "#fb751e";
+    Col2 <<- "#8ac3ff";
+    Col3 <<- "#eea6ee";
+
+    z_susc = fit_susc$posterior
+    z_symp = fit_symp$posterior
+    z_both = fit_both$posterior
+    
+    ppsusc = ggplot()
+
+    ppsusc = add_coss(ppsusc, 90, Col1,
+                    z_susc$age_y, z_susc$susc_y,
+                    z_susc$age_m, z_susc$susc_m,
+                    z_susc$age_o, z_susc$susc_o)
+    ppsusc = add_coss(ppsusc, 90, Col2,
+                    15, z_symp$susc,
+                    45, z_symp$susc,
+                    75, z_symp$susc)
+    ppsusc = add_coss(ppsusc, 90, Col3,
+                    z_both$age_y, z_both$susc * z_both$eff_y,
+                    z_both$age_m, z_both$susc * z_both$eff_m,
+                    z_both$age_o, z_both$susc * z_both$eff_o)
+    ppsusc = ppsusc + 
+        ylim(0, 0.1) +
+        labs(x = "Age", y = NULL, title = "Susceptibility") +
+        txt_theme
+    
+    ppsymp = ggplot()
+    ppsymp = add_coss(ppsymp, 90, Col1,
+                    15, scf,
+                    45, scf,
+                    75, scf)
+    ppsymp = add_coss(ppsymp, 90, Col2,
+                    z_symp$age_y, z_symp$symp_y,
+                    z_symp$age_m, z_symp$symp_m,
+                    z_symp$age_o, z_symp$symp_o)
+    ppsymp = add_coss(ppsymp, 90, Col3,
+                    z_both$age_y, 0.5 * z_both$eff_y,
+                    z_both$age_m, 0.5 * z_both$eff_m,
+                    z_both$age_o, 0.5 * z_both$eff_o)
+    ppsymp = ppsymp + 
+        ylim(0, 1) +
+        labs(x = "Age", y = NULL, title = "Clinical fraction") +
+        txt_theme
+    
+    contact = rbind(
+        data.table(scenario = "1", what = "q[H]", q = z_susc$qH),
+        data.table(scenario = "1", what = "q[L]", q = z_susc$qL),
+        data.table(scenario = "2", what = "q[H]", q = z_symp$qH),
+        data.table(scenario = "2", what = "q[L]", q = z_symp$qL),
+        data.table(scenario = "4", what = "q[H]", q = z_both$qH),
+        data.table(scenario = "4", what = "q[L]", q = z_both$qL)
+    )
+    
+    contact[, what := factor(what, levels = c("q[H]", "q[L]"))]
+    
+    ppcontact = ggplot(contact) +
+        stat_ydensity(aes(what, q, fill = scenario), geom = "violin", colour = NA, kernel = "epanechnikov") +
+        scale_x_discrete(NULL, limits = rev(levels(contact$what)), breaks = c("q[H]", "q[L]"), labels = parse(text = c("q[H]", "q[L]"))) +
+        facet_wrap(~paste0("M", scenario), strip.position = "left", ncol = 1, labeller = label_parsed) +
+        sc_colours() +
+        coord_flip() +
+        labs(x = NULL, y = "Non-school contacts", title = "Contact multipliers") +
+        theme(legend.position = "none", strip.placement = "outside", 
+            strip.background = element_blank(), strip.text.y.left = element_text(angle = 0)) +
+        txt_theme
+
+    cat("Non-R0 done.\n")
+    
+    seed_date = rbind(
+        data.table(scenario = "1", d = ymd(fit_susc$base_parameters$date0) + fit_susc$posterior$seed_start),
+        data.table(scenario = "2", d = ymd(fit_symp$base_parameters$date0) + fit_symp$posterior$seed_start),
+        data.table(scenario = "3", d = ymd(fit_both$base_parameters$date0) + fit_both$posterior$seed_start)
+    );
+    
+    r0 = rbind(
+        cbind(scenario = "1", calc_R0(fit_susc, 100)),
+        cbind(scenario = "2", calc_R0(fit_symp, 100)),
+        cbind(scenario = "3", calc_R0(fit_both, 100))
+    )
+
+    ppR0 = show_R0(r0, seed_date, time_start = fit_same$base_parameters$date0) + 
+        ylim(0, 6) + txt_theme
+    cat("R0 done.\n")
+
+    pp = plot_grid(ppsusc, ppsymp,
+        ppcontact, ppR0, nrow = 2, ncol = 2, align = "hv", axis = "bl", labels = c("b", "c", "d", "e"), label_size = 10)
+
+    cat("Params done.\n")
+    
+    z = rbind(
+        cbind(cm_sample_fit(fit_susc, 50), scenario = 1),
+        cbind(cm_sample_fit(fit_symp, 50), scenario = 2),
+        cbind(cm_sample_fit(fit_both, 50), scenario = 3)
+    )
+    
+    pd = sp_comparison4(z, time_start = "2019-11-01", time_end = "2020-02-01")
+    
+    diagram = plot_grid(ggdraw() + draw_image(path("../model_diagram_small_alt.png")),
+        tinydists(fit_same), ggdraw(), ncol = 3, rel_widths = c(4, 1, 0.25))
+    
+    p1 = plot_grid(plot_grid(diagram, pp, nrow = 2, rel_heights = c(2, 4), labels = c("a", ""), label_size = 10), pd, nrow = 1, rel_widths = c(2, 3))
+
+    cat("Epi curves done.\n")
+
+    ggsave(path(paste0(fileout, ".pdf")), p1, width = 20, height = 10, units = "cm", useDingbats = F)
+    ggsave(path(paste0(fileout, ".png")), p1, width = 20, height = 10, units = "cm")
+    
+    Col1 <<- "#fb751e";
+    Col2 <<- "#8ac3ff";
+    Col3 <<- "#ac2f2f";
+
+}
